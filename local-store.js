@@ -47,6 +47,16 @@ window.MoguLocal = (() => {
   Object.assign(r,{items:combined,foodIds:unique(combined.filter(i=>i.intake==='confirmed').map(i=>i.foodId)),offeredFoodIds:unique([...(r.offeredFoodIds??[]),...combined.map(i=>i.foodId)]),result:combined.some(i=>i.intake==='confirmed')?'食べた':'食べなかった',actualTitle:unique(combined.map(i=>names.get(i.foodId))).join('・').slice(0,100),actor,updatedAt:now()});
   r.quickApplied=d.replace?[signature]:[...(r.quickApplied??[]),signature];r.quickSources=d.replace?[{items:clone(items)}]:[...(r.quickSources??[]),{items:clone(items)}];if(p.quickCreated){p.title=r.actualTitle;p.foodIds=[...r.offeredFoodIds]}
  }
+ // 献立の登録・編集。記録・準備済みの献立も編集できる。ただし日付・時間帯は変えず（記録の日付が動くため。日付は「移動」から）、
+ // 取り出し済みなら使う個数と取り出し済みの状態はそのまま残す。献立の食材を直しても記録の「出した食材」が変わらないよう、未保存なら今の食材を記録側に残す。
+ function savePlan(s,d){
+  const old=d.id?find(s.plans,d.id):null,rec=old&&s.records.find(r=>r.planId===old.id),fixed=old&&(old.prepared||Boolean(rec));
+  day(d.date);need(slots.includes(d.slot));need(!fixed||(d.date===old.date&&d.slot===old.slot),'準備・記録済みの食事の日付・時間帯は「移動」から変えられます。');need(!s.plans.some(p=>p!==old&&p.date===d.date&&p.slot===d.slot),'その食事枠には献立があります。');
+  let ids=foodIds(s,d.foods??[]);const uses=(old?.prepared?old.uses:(d.uses??[])).map(u=>{const b=find(s.batches,u.batchId);ids=unique([...ids,...b.foodIds]);return {batchId:b.id,quantity:count(u.quantity)}});
+  const p={id:old?.id??uid(),date:d.date,slot:d.slot,title:text(d.title,'献立名',100,true),note:text(d.note??'','献立メモ',2000),foodIds:ids,uses,prepared:Boolean(old?.prepared)};
+  if(rec&&rec.offeredFoodIds===undefined)rec.offeredFoodIds=[...old.foodIds];
+  if(old)Object.assign(old,p);else s.plans.push(p);
+ }
  function apply(s,action,d,actor,op){
   switch(action){
    case 'quickLog':quick(s,d,actor);break;
@@ -59,7 +69,9 @@ window.MoguLocal = (() => {
    case 'foodNote':find(s.foods,d.id).note=text(d.note??'','食材メモ',2000);break;
    case 'batch':{const b={id:uid(),name:text(d.name,'ストック名',100,true),quantity:0,madeOn:day(d.madeOn),checkOn:d.checkOn?day(d.checkOn):'',portion:text(d.portion??'','一個の量',100),location:text(d.location??'','保存場所',100),shape:text(d.shape??'','形状',100),foodIds:foodIds(s,d.foods??[])};s.batches.push(b);event(s,b,count(d.quantity),'補充',actor,op);break}
    case 'adjust':{need(Number.isInteger(d.delta)&&d.delta!==0&&Math.abs(d.delta)<=9999);event(s,find(s.batches,d.id),d.delta,text(d.reason||'数え直し','変更理由',100,true),actor,op);break}
-   case 'plan':{const old=d.id?find(s.plans,d.id):null;need(!old||(!old.prepared&&!s.records.some(r=>r.planId===old.id)),'準備・記録済みの食事は補足から訂正してください。');day(d.date);need(slots.includes(d.slot));need(!s.plans.some(p=>p!==old&&p.date===d.date&&p.slot===d.slot),'その食事枠には献立があります。');let ids=foodIds(s,d.foods??[]);const uses=(d.uses??[]).map(u=>{const b=find(s.batches,u.batchId);ids=unique([...ids,...b.foodIds]);return {batchId:b.id,quantity:count(u.quantity)}});const p={id:old?.id??uid(),date:d.date,slot:d.slot,title:text(d.title,'献立名',100,true),note:text(d.note??'','献立メモ',2000),foodIds:ids,uses,prepared:false};if(old)Object.assign(old,p);else s.plans.push(p);break}
+   case 'plan':savePlan(s,d);break;
+   // 使い切り提案の「この日の提案を献立に入れる」。1日分（最大3食）を1回の操作でまとめて登録する（取り消しも1回で戻る）。中身は通常の献立と同じ。
+   case 'planMany':{need(Array.isArray(d.plans)&&d.plans.length>=1&&d.plans.length<=3);for(const x of d.plans){need(x&&!x.id);savePlan(s,x)}break}
    case 'prepare':{const p=find(s.plans,d.id);if(p.prepared)break;need(p.uses.length,'取り出すストックがありません。');for(const u of p.uses)need(find(s.batches,u.batchId).quantity>=u.quantity,'ストックが不足しています。');for(const u of p.uses)event(s,find(s.batches,u.batchId),-u.quantity,'食事の準備',actor,op,p.id);p.prepared=true;break}
    case 'record':{
     const p=find(s.plans,d.id);need(results.includes(d.result));let r=s.records.find(r=>r.planId===p.id);if(!r){r={id:uid(),planId:p.id,foodIds:[],memo:'',symptom:'',observedAt:'',eatenAt:'',recordedAt:now(),actualTitle:p.title,offeredFoodIds:[...p.foodIds]};s.records.push(r)}Object.assign(r,{result:d.result,actor,updatedAt:now()});if('actualTitle'in d)r.actualTitle=text(d.actualTitle,'食事名',100,true);
@@ -70,7 +82,8 @@ window.MoguLocal = (() => {
     if(r.items){r.items=r.items.map(i=>r.foodIds.includes(i.foodId)&&i.intake==='not_eaten'?{...i,amount:null,intake:'confirmed'}:i);for(const id of r.foodIds)if(!r.items.some(i=>i.foodId===id))r.items.push({foodId:id,amount:null,unit:'',intake:'confirmed'})}
     for(const k of ['memo','symptom','observedAt'])if(k in d)r[k]=text(d[k],'食事の補足',2000);if('eatenAt'in d){need(!d.eatenAt||!Number.isNaN(Date.parse(d.eatenAt)),'食事時刻を確認してください。');r.eatenAt=d.eatenAt?new Date(d.eatenAt).toISOString():''}break;
    }
-   case 'move':{const p=find(s.plans,d.id),free=p=>!p.prepared&&!s.records.some(r=>r.planId===p.id);need(free(p),'準備・記録済みの食事は移動できません。');day(d.date);need(slots.includes(d.slot));const other=s.plans.find(x=>x!==p&&x.date===d.date&&x.slot===d.slot);if(other){need(free(other),'移動先は準備・記録済みです。');other.date=p.date;other.slot=p.slot}p.date=d.date;p.slot=d.slot;break}
+   // 記録・準備済みの献立は、食事の記録（日付は献立の日付から決まる）と取り出し済みの在庫を動かさないよう、元の枠に残したまま同じ献立を移動先に入れる（移動先が空いているときだけ）。
+   case 'move':{const p=find(s.plans,d.id),free=p=>!p.prepared&&!s.records.some(r=>r.planId===p.id);day(d.date);need(slots.includes(d.slot));const other=s.plans.find(x=>x!==p&&x.date===d.date&&x.slot===d.slot);if(!free(p)){need(d.date!==p.date||d.slot!==p.slot,'移動先を別の日・時間帯にしてください。');need(!other,'移動先には献立があります。記録・準備済みの食事は、空いている枠に同じ献立を入れられます。');s.plans.push({id:uid(),date:d.date,slot:d.slot,title:p.title,note:p.note,foodIds:[...p.foodIds],uses:clone(p.uses),prepared:false});break}if(other){need(free(other),'移動先は準備・記録済みです。');other.date=p.date;other.slot=p.slot}p.date=d.date;p.slot=d.slot;break}
    case 'shopping':if(d.id){need(typeof d.done==='boolean');find(s.shopping,d.id).done=d.done}else s.shopping.push({id:uid(),name:text(d.name,'買うもの',100,true),done:false});break;
    case 'restore':{const restored=clone(d.state);if(restored.schemaVersion===1){restored.schemaVersion=2;restored.templates=[]}validate(restored);for(const k of Object.keys(s))delete s[k];Object.assign(s,restored);break}
    default:need(false,'対応していない操作です。');

@@ -138,3 +138,43 @@ document.addEventListener('input',e=>{if(e.target.id==='quickSearch'){quickSearc
 document.addEventListener('submit',e=>{if(e.target.id==='quickCustomForm'){e.preventDefault();if([...composingInputs].some(input=>e.target.contains(input)))return;const name=new FormData(e.target).get('name').trim();if(!name)return;if(name&&!qDraft().items.some(i=>i.name===name)){qDraft().items.push(qDefaults(name));quickAmountRow=qDraft().items.length-1}const row=quickAmountRow;draftFormSaved();closeDialog();quickSearch='';render();if(row!==null)qOpenAmount(row)}});
 
 function qRefreshSearch(){const results=$('#quickFoodResults');if(results){results.innerHTML=qFoodResultsMarkup();if(pendingMutation||!editable())results.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true)}}
+
+// 使い切り提案。決め打ちのルールで、表示のたびに今の在庫・献立・記録から作り直す（保存しない）。
+// 区分は量の目安と同じ食材分類表（qFoodGroups）から：穀類＝主食、魚・肉・豆腐・乳製品＝主菜、野菜・果物＝副菜。分類表にない食材だけのロットは組み合わせに入れない。
+// 1日の食数は時期（qStageKey）から。時期が分からなければ2回を目安にする。初めての食材は記録からの導出（qEatenFoods）で判定し、1日1種類まで。
+const qSuggestRoles=[['主食',['grains']],['主菜',['fish','meat','tofu','dairy']],['副菜',['vegfruit']]];
+const qSuggestMeals={'初期':1,'中期':2,'後期':3,'完了期':3};
+const qSuggestSlots={1:['breakfast'],2:['breakfast','dinner'],3:['breakfast','lunch','dinner']};
+function qLotRole(b){for(const n of qStockNames(b)){const g=qFoodGroup(n);if(g)return qSuggestRoles.find(r=>r[1].includes(g))[0]}return null}
+function qSuggest(today=jstDate()){
+ const stage=qStageKey(),count=qSuggestMeals[stage]||2,start=plusDate(today,1),reserved=new Map();
+ // 今日以降のまだ取り出していない献立が使う予定の個数は、先に差し引く。
+ for(const p of state().plans)if(!p.prepared&&p.date>=today)for(const u of p.uses)reserved.set(u.batchId,(reserved.get(u.batchId)||0)+u.quantity);
+ const lots=stockSorted(state().batches,today).map(b=>({b,e:stockExpiry(b,today),left:b.quantity-(reserved.get(b.id)||0),role:qLotRole(b),names:qStockNames(b)})).filter(x=>x.e&&x.left>0&&x.e.due>=start);
+ if(!lots.length)return null;
+ const usable=lots.filter(x=>x.role),last=usable.reduce((m,x)=>x.e.due>m?x.e.due:m,''),end=[plusDate(start,6),last].sort()[0],eaten=new Set(qEatenFoods().keys()),days=[];
+ for(let d=start;usable.length&&d<=end;d=plusDate(d,1)){
+  const planned=meals(d),fresh=new Set(planned.flatMap(qPlanNames).filter(n=>!eaten.has(n))),list=[];
+  for(const slot of qSuggestSlots[count]){
+   if(planned.some(p=>p.slot===slot)){list.push({slot,taken:true,items:[]});continue}
+   const items=[];
+   for(const [role] of qSuggestRoles){
+    const x=usable.find(x=>x.role===role&&x.left>0&&x.e.due>=d&&(x.names.every(n=>eaten.has(n))||new Set([...fresh,...x.names.filter(n=>!eaten.has(n))]).size<=1));
+    if(!x)continue;
+    x.left--;const first=x.names.filter(n=>!eaten.has(n));first.forEach(n=>fresh.add(n));
+    items.push({batchId:x.b.id,name:x.b.name,role,names:x.names,first:first.length>0,due:x.e.due});
+   }
+   list.push({slot,taken:false,items});
+  }
+  for(const n of fresh)eaten.add(n);
+  days.push({date:d,meals:list});
+ }
+ return {stage,count,guess:!qSuggestMeals[stage],days,leftovers:usable.filter(x=>x.left>0).map(x=>({name:x.b.name,left:x.left,due:x.e.due})),unknown:lots.filter(x=>!x.role).map(x=>x.b.name)};
+}
+// 提案の1食を、通常の献立（local-store の plan と同じ形）にする。在庫は減らさない（取り出しは従来どおり「今日」から）。
+function qSuggestPlan(date,m){return {date,slot:m.slot,title:m.items.map(i=>i.name).join('・').slice(0,100),note:'使い切り提案から入れた献立です。',foods:[...new Set(m.items.flatMap(i=>i.names))],uses:m.items.map(i=>({batchId:i.batchId,quantity:1}))}}
+function qSuggestSection(){
+ const s=qSuggest();if(!s)return '';
+ const meal=m=>`<li class="qSuggestMeal"><span class="qSuggestSlot">${slots[m.slot]}</span><span class="qSuggestItems">${m.taken?'<span class="muted">献立があるので、そのままにします</span>':m.items.length?m.items.map(i=>`<span class="qSuggestItem"><small>${i.role}</small>${esc(i.name)}${i.first?'<span class="qFirstBadge">はじめて</span>':''}</span>`).join(''):'<span class="muted">使えそうなストックはありません</span>'}</span></li>`;
+ return `<section class="qSuggest" id="useupSection" aria-labelledby="useupTitle"><h2 id="useupTitle">使い切り提案</h2><p class="small muted">冷凍ストックを期限の目安（作った日から7日）までに使い切るための、組み合わせの一例です。1日${s.count}回${s.guess?'（今の時期が未設定のため、2回を目安にしています）':'（'+esc(s.stage)+'の目安）'}で、主食・主菜・副菜を在庫にある分だけ組み合わせています。はじめての食材は1日1種類までにしています。</p>${s.days.map(day=>{const can=day.meals.some(m=>!m.taken&&m.items.length);return `<div class="qSuggestDay"><div class="sectionhead"><h3>${dateLabel(day.date)}</h3>${can?`<button class="linkButton" data-action="suggestPlan" data-date="${day.date}" data-edit>この日の提案を献立に入れる</button>`:''}</div><ul>${day.meals.map(meal).join('')}</ul></div>`}).join('')}${s.leftovers.length?`<p class="qSuggestNote">期限までに使い切れないかも：${esc(s.leftovers.map(x=>x.name+'（あと'+x.left+'個）').join('・'))}</p>`:''}${s.unknown.length?`<p class="small muted">主食・主菜・副菜の区分が分からないため、組み合わせに入れていないストック：${esc(s.unknown.join('・'))}</p>`:''}<p class="small muted">あくまで目安です。食べる様子に合わせて自由に変えてください。献立に入れても在庫は減りません。</p></section>`;
+}
