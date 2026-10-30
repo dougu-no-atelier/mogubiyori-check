@@ -33,6 +33,10 @@ window.MoguLocal = (() => {
   for(const b of s.batches)need(s.stockEvents.filter(e=>e.batchId===b.id).reduce((n,e)=>n+e.delta,0)===b.quantity,'在庫数と履歴が一致しません。');
   for(const i of s.shopping){text(i.name,'買い物',100,true);need(typeof i.done==='boolean')}
  }
+ // 2026-10-30: 1個分の量（任意の追加項目）。portionAmount は数値、portionUnit は 'tsp'（小さじ）|'g'|'ml'|'whole'（食材そのまま・量は持たない）。
+ // どちらも未入力なら項目自体を置かない。validate はこの2項目を見ないので、既存（旧版）の検証もそのまま通る。
+ const portionUnits = ['tsp','g','ml','whole'];
+ function portion(d){const unit=d.portionUnit??'',raw=d.portionAmount??'';need(unit===''||portionUnits.includes(unit),'1個分の量の単位を選び直してください。');if(unit==='whole')return {portionUnit:unit};if(raw===''||raw===null){need(unit==='','1個分の量を数字で入力してください。');return {}}need(unit!=='','1個分の量の単位を選んでください。');const a=amount(raw);need(Number(a)>0,'1個分の量はゼロより大きい数で入力してください。');return {portionAmount:Number(a),portionUnit:unit}}
  function event(s,b,delta,kind,actor,operationId,planId=null){count(b.quantity+delta,true);b.quantity+=delta;s.stockEvents.push({id:uid(),batchId:b.id,delta,kind,actor,operationId,planId,at:now()})}
  function quick(s,d,actor){
   day(d.date);need(slots.includes(d.slot),'食事枠を選んでください。');const items=normalize(s,d.items),names=new Map(s.foods.map(f=>[f.id,f.name]));
@@ -71,7 +75,9 @@ window.MoguLocal = (() => {
    case 'profile':{const kept=periods.includes(s.child.period)?s.child.period:'',period='period'in d?d.period??'':kept;need(period===''||periods.includes(period),'今の時期を選び直してください。');s.household.name=text(d.household||'わが家の食卓','家庭名',60,true);s.child={name:text(d.name??'','呼び名',60,true),stage:text(d.stage??'','段階メモ',60),instructions:text(d.instructions??'','個別の指示',2000)};if(period)s.child.period=period;break}
    case 'note':s.note=text(d.note??'','家族メモ',2000);break;
    case 'foodNote':find(s.foods,d.id).note=text(d.note??'','食材メモ',2000);break;
-   case 'batch':{const b={id:uid(),name:text(d.name,'ストック名',100,true),quantity:0,madeOn:day(d.madeOn),checkOn:d.checkOn?day(d.checkOn):'',portion:text(d.portion??'','一個の量',100),location:text(d.location??'','保存場所',100),shape:text(d.shape??'','形状',100),foodIds:foodIds(s,d.foods??[])};s.batches.push(b);event(s,b,count(d.quantity),'補充',actor,op);break}
+   case 'batch':{const b={id:uid(),name:text(d.name,'ストック名',100,true),quantity:0,madeOn:day(d.madeOn),checkOn:d.checkOn?day(d.checkOn):'',portion:text(d.portion??'','一個の量',100),location:text(d.location??'','保存場所',100),shape:text(d.shape??'','形状',100),foodIds:foodIds(s,d.foods??[]),...portion(d)};s.batches.push(b);event(s,b,count(d.quantity),'補充',actor,op);break}
+   // 既存ロットの1個分の量を設定・変更・未設定に戻す。個数・履歴は変えない。
+   case 'batchPortion':{const b=find(s.batches,d.id),p=portion(d);delete b.portionAmount;delete b.portionUnit;Object.assign(b,p);break}
    case 'adjust':{need(Number.isInteger(d.delta)&&d.delta!==0&&Math.abs(d.delta)<=9999);event(s,find(s.batches,d.id),d.delta,text(d.reason||'数え直し','変更理由',100,true),actor,op);break}
    case 'plan':savePlan(s,d);break;
    // 使い切り提案の「この日の提案を献立に入れる」。1日分（最大3食）を1回の操作でまとめて登録する（取り消しも1回で戻る）。中身は通常の献立と同じ。
