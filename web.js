@@ -1,5 +1,5 @@
 'use strict';
-let webRegistration=null,webReloading=false;
+let webRegistration=null,webReloading=false,webReloaded=false;
 const INTRO_KEY='mogubi-web-intro:'+new URL('./',document.currentScript.src).pathname;
 function webIntro(){let seen=false;try{seen=localStorage.getItem(INTRO_KEY)==='yes'}catch{}return seen?'':'<aside class="webIntro"><p>登録なしで使えます。記録はこの端末だけに保存され、家族との自動同期はありません。</p><p>SNSアプリ内では、Safari・Chromeで開き直してからお使いください。</p><a href="./guide.html">使い方と保存の注意点</a> <button data-web="intro">確認して使う</button></aside>'}
 function webUpdateButton(){const b=document.querySelector('[data-web=update]');if(b)b.hidden=!webRegistration?.waiting}
@@ -14,6 +14,8 @@ document.addEventListener('click',async e=>{
  }catch(err){showError(err.message||'この操作は利用できません。')}
 });
 if('serviceWorker'in navigator&&window.isSecureContext){
- navigator.serviceWorker.addEventListener('controllerchange',()=>{if(webReloading)location.reload()});
+ // Reload once when a new version takes over. Skip the first install (no previous controller) so a fresh page never reloads.
+ let webController=navigator.serviceWorker.controller;
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{const prev=webController;webController=navigator.serviceWorker.controller;if(webReloaded||(!prev&&!webReloading))return;webReloaded=true;location.reload()});
  navigator.serviceWorker.register('./sw.js',{scope:'./'}).then(r=>{webRegistration=r;webUpdateButton();r.addEventListener('updatefound',()=>r.installing?.addEventListener('statechange',webUpdateButton))}).catch(()=>{/* Online recording remains available. Settings explain offline prerequisites. */});
 }
