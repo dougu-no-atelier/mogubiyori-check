@@ -45,7 +45,7 @@ window.MoguLocal = (() => {
   const old=r.items?.length?r.items:r.foodIds.map(foodId=>({foodId,amount:null,unit:'',intake:'confirmed'}));
   const combined=d.replace?items:merge(old,items);
   Object.assign(r,{items:combined,foodIds:unique(combined.filter(i=>i.intake==='confirmed').map(i=>i.foodId)),offeredFoodIds:unique([...(r.offeredFoodIds??[]),...combined.map(i=>i.foodId)]),result:combined.some(i=>i.intake==='confirmed')?'食べた':'食べなかった',actualTitle:unique(combined.map(i=>names.get(i.foodId))).join('・').slice(0,100),actor,updatedAt:now()});
-  r.quickApplied=d.replace?[signature]:[...(r.quickApplied??[]),signature];r.quickSources=d.replace?[{items:clone(items)}]:[...(r.quickSources??[]),{items:clone(items)}];if(p.quickCreated){p.title=r.actualTitle;p.foodIds=[...r.offeredFoodIds]}
+  r.quickApplied=d.replace?[signature]:[...(r.quickApplied??[]),signature];r.quickSources=d.replace?[{items:clone(items)}]:[...(r.quickSources??[]),{items:clone(items)}];if(p.quickCreated){p.title=r.actualTitle;p.foodIds=[...r.offeredFoodIds];if(Array.isArray(p.foodIdsAtRecord))p.foodIdsAtRecord=[...p.foodIds]}
  }
  // 献立の登録・編集。記録・準備済みの献立も編集できる。ただし日付・時間帯は変えず（記録の日付が動くため。日付は「移動」から）、
  // 取り出し済みなら使う個数と取り出し済みの状態はそのまま残す。献立の食材を直しても記録の「出した食材」が変わらないよう、未保存なら今の食材を記録側に残す。
@@ -55,6 +55,10 @@ window.MoguLocal = (() => {
   let ids=foodIds(s,d.foods??[]);const uses=(old?.prepared?old.uses:(d.uses??[])).map(u=>{const b=find(s.batches,u.batchId);ids=unique([...ids,...b.foodIds]);return {batchId:b.id,quantity:count(u.quantity)}});
   const p={id:old?.id??uid(),date:d.date,slot:d.slot,title:text(d.title,'献立名',100,true),note:text(d.note??'','献立メモ',2000),foodIds:ids,uses,prepared:Boolean(old?.prepared)};
   if(rec&&rec.offeredFoodIds===undefined)rec.offeredFoodIds=[...old.foodIds];
+  // 記録済みの献立を初めて編集するとき、記録した時点の食材を献立側に残す（任意項目。表示で「内容変更あり」を判定するだけで、記録は書き換えない）。
+  if(rec&&!Array.isArray(old.foodIdsAtRecord))old.foodIdsAtRecord=[...old.foodIds];
+  // 食事名（actualTitle）が無い旧記録は献立名を表示名にしているので、献立名を直しても記録の表示名が変わらないよう、記録時の献立名も献立側に残す（記録は書き換えない）。
+  if(rec&&!rec.actualTitle&&typeof old.titleAtRecord!=='string')old.titleAtRecord=old.title;
   if(old)Object.assign(old,p);else s.plans.push(p);
  }
  function apply(s,action,d,actor,op){
@@ -83,7 +87,8 @@ window.MoguLocal = (() => {
     for(const k of ['memo','symptom','observedAt'])if(k in d)r[k]=text(d[k],'食事の補足',2000);if('eatenAt'in d){need(!d.eatenAt||!Number.isNaN(Date.parse(d.eatenAt)),'食事時刻を確認してください。');r.eatenAt=d.eatenAt?new Date(d.eatenAt).toISOString():''}break;
    }
    // 記録・準備済みの献立は、食事の記録（日付は献立の日付から決まる）と取り出し済みの在庫を動かさないよう、元の枠に残したまま同じ献立を移動先に入れる（移動先が空いているときだけ）。
-   case 'move':{const p=find(s.plans,d.id),free=p=>!p.prepared&&!s.records.some(r=>r.planId===p.id);day(d.date);need(slots.includes(d.slot));const other=s.plans.find(x=>x!==p&&x.date===d.date&&x.slot===d.slot);if(!free(p)){need(d.date!==p.date||d.slot!==p.slot,'移動先を別の日・時間帯にしてください。');need(!other,'移動先には献立があります。記録・準備済みの食事は、空いている枠に同じ献立を入れられます。');s.plans.push({id:uid(),date:d.date,slot:d.slot,title:p.title,note:p.note,foodIds:[...p.foodIds],uses:clone(p.uses),prepared:false});break}if(other){need(free(other),'移動先は準備・記録済みです。');other.date=p.date;other.slot=p.slot}p.date=d.date;p.slot=d.slot;break}
+   // 記録・準備済みの献立の写しは、ストックの使用（uses）を引き継がない（在庫連動なし）。引き継ぐと元と写しの両方から同じロットを取り出せてしまうため。
+   case 'move':{const p=find(s.plans,d.id),free=p=>!p.prepared&&!s.records.some(r=>r.planId===p.id);day(d.date);need(slots.includes(d.slot));const other=s.plans.find(x=>x!==p&&x.date===d.date&&x.slot===d.slot);if(!free(p)){need(d.date!==p.date||d.slot!==p.slot,'移動先を別の日・時間帯にしてください。');need(!other,'移動先には献立があります。記録・準備済みの食事は、空いている枠に同じ献立を入れられます。');s.plans.push({id:uid(),date:d.date,slot:d.slot,title:p.title,note:p.note,foodIds:[...p.foodIds],uses:[],prepared:false});break}if(other){need(free(other),'移動先は準備・記録済みです。');other.date=p.date;other.slot=p.slot}p.date=d.date;p.slot=d.slot;break}
    case 'shopping':if(d.id){need(typeof d.done==='boolean');find(s.shopping,d.id).done=d.done}else s.shopping.push({id:uid(),name:text(d.name,'買うもの',100,true),done:false});break;
    case 'restore':{const restored=clone(d.state);if(restored.schemaVersion===1){restored.schemaVersion=2;restored.templates=[]}validate(restored);for(const k of Object.keys(s))delete s[k];Object.assign(s,restored);break}
    default:need(false,'対応していない操作です。');
