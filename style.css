@@ -155,3 +155,35 @@ body[data-quick=true] .sideNote{display:none}
 .field>input[type=date]::-webkit-date-and-time-value,.field>input[type=datetime-local]::-webkit-date-and-time-value{text-align:left}
 select:focus-visible{outline:3px solid var(--red);outline-offset:3px}
 .fieldPair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:end}
+/* 2026-11-01: 冷凍庫上部の「ストックを追加」・使い切り提案の品数の根拠／組み合わせの理由／不足のおすすめ */
+.stockAddTop{display:block;width:100%;min-width:0;margin:0 0 14px}
+.qSuggestStep,.qSuggestStart{margin:6px 0 0;line-height:1.6}
+.qSuggestStart .linkButton{min-height:44px;padding:4px 6px}
+.qSuggestWhy{flex-basis:100%;font-size:12px;color:#2d5942}
+.qSuggestShort{margin:10px 0 0;padding:8px 10px;border-radius:12px;background:var(--paper,#fff8ed)}
+.qSuggestShort p{margin:4px 0;line-height:1.6}
+.qShortList{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.qShortList .linkButton{font-size:13px;min-height:44px;padding:4px 6px}
+.qShortDone{font-size:12px;color:var(--muted)}
+/* 2026-11-01（1.0.17）: 使い切り提案の理由を「見出し：短い本文」の行に。見出しは左にそろえ、本文と補足は右の列で折り返す。 */
+.qSuggestLead{margin:0 0 4px;line-height:1.6}
+.qSuggestFacts,.qSuggestShort{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.qSuggestShort{margin-top:10px;padding:8px 10px}
+.qSuggestFact,.qShortLine{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 8px;align-items:baseline;font-size:13px;line-height:1.6}
+.qFactLabel{white-space:nowrap;font-weight:700;color:var(--ink)}.qFactBody{min-width:0}
+.qFactNote{display:block;font-size:12px;color:var(--muted)}
+.qShortLine .qShortList{grid-column:2}
+.qSuggestOnly b,.qSuggestAssume b{color:var(--ink)}
+@media(max-width:360px){.qSuggestFact,.qShortLine{grid-template-columns:minmax(0,1fr)}.qShortLine .qShortList{grid-column:1}}
+/* 2026-11-01（1.0.17）: 文字・場所の崩れ対策。長い名前（60字）・大きな数字・長い補足・長いボタン文言でも、はみ出さず重ならないようにする。
+   折り返しは全体で anywhere（日本語はもともと字単位で折れるので、効くのは英数字の長い並び）。flex / grid の子は min-width:0 で縮められるようにする。 */
+body{overflow-wrap:anywhere}
+.buttonrow button,dialog .formActions button{white-space:normal;min-width:0}
+.topbar>div{min-width:0}.topActions{flex:none}
+.listItem>div,.checkLabel>span,.qWeekHeader>div,.heroTop>.pill{min-width:0}
+#statusbar>span{min-width:0;flex:1}
+.qSuggestMeal{min-width:0}.qSuggestItems{flex:1;min-width:0}.qSuggestItem{min-width:0}
+.qPlan .pill{max-width:45%}.mealItem .pill{max-width:9em}
+.qFoodTile{grid-template-columns:minmax(0,1fr) fit-content(50%)}
+.qWeekDetail strong{white-space:normal;text-align:right}
+.batchChoice>span{min-width:0}
