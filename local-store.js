@@ -84,7 +84,8 @@ window.MoguLocal = (() => {
    case 'adjust':{need(Number.isInteger(d.delta)&&d.delta!==0&&Math.abs(d.delta)<=9999);event(s,find(s.batches,d.id),d.delta,text(d.reason||'数え直し','変更理由',100,true),actor,op);break}
    case 'plan':savePlan(s,d);break;
    // 使い切り提案の「この日の提案を献立に入れる」。1日分（最大3食）を1回の操作でまとめて登録する（取り消しも1回で戻る）。中身は通常の献立と同じ。
-   case 'planMany':{need(Array.isArray(d.plans)&&d.plans.length>=1&&d.plans.length<=21);for(const x of d.plans){need(x&&!x.id);savePlan(s,x)}break}
+   // 2026-11-02（1.2.1）: planMany は、取り出し・記録の無い既存の献立に限って id つきの入れ直しも受ける（自動で入れたおすすめの組み立て直し用）。保存形式・validate は変えない。
+   case 'planMany':{need(Array.isArray(d.plans)&&d.plans.length>=1&&d.plans.length<=21);for(const x of d.plans){need(x&&(!x.id||(o=>Boolean(o)&&!o.prepared&&!s.records.some(r=>r.planId===o.id))(s.plans.find(p=>p.id===x.id))));savePlan(s,x)}break}
    case 'prepare':{const p=find(s.plans,d.id);if(p.prepared)break;need(p.uses.length,'取り出すストックがありません。');for(const u of p.uses)need(find(s.batches,u.batchId).quantity>=u.quantity,'ストックが不足しています。');for(const u of p.uses)event(s,find(s.batches,u.batchId),-u.quantity,'食事の準備',actor,op,p.id);p.prepared=true;break}
    case 'record':{
     const p=find(s.plans,d.id);need(results.includes(d.result));let r=s.records.find(r=>r.planId===p.id);if(!r){r={id:uid(),planId:p.id,foodIds:[],memo:'',symptom:'',observedAt:'',eatenAt:'',recordedAt:now(),actualTitle:p.title,offeredFoodIds:[...p.foodIds]};s.records.push(r)}Object.assign(r,{result:d.result,actor,updatedAt:now()});if('actualTitle'in d)r.actualTitle=text(d.actualTitle,'食事名',100,true);

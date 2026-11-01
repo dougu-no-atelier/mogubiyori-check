@@ -8,7 +8,9 @@ const QUICK_UNIT_KEY='mogubi-quick-unit:'+new URL('./',document.currentScript.sr
 let quickLastUnit=null;
 function qDefaultUnit(){if(quickLastUnit===null){quickLastUnit='';try{quickLastUnit=localStorage.getItem(QUICK_UNIT_KEY)||''}catch{}}return quickUnits.includes(quickLastUnit)?quickLastUnit:'小さじ'}
 function qRememberUnit(unit){if(!quickUnits.includes(unit))return;quickLastUnit=unit;try{localStorage.setItem(QUICK_UNIT_KEY,unit)}catch{}}
-function qSlot(){if(!view.quickSlot){const h=Number(new Intl.DateTimeFormat('en',{hour:'numeric',hourCycle:'h23',timeZone:'Asia/Tokyo'}).format(new Date()));view.quickSlot=h<11?'breakfast':h<15?'lunch':'dinner'}return view.quickSlot}
+function qSlot(){if(!view.quickSlot){const h=Number(new Intl.DateTimeFormat('en',{hour:'numeric',hourCycle:'h23',timeZone:'Asia/Tokyo'}).format(new Date()));view.quickSlot=qPickSlot(h<11?'breakfast':h<15?'lunch':'dinner')}return view.quickSlot}
+// 1.2.1: 時刻から決めた食事が「使う食事」に無いときは、それより前の使う食事（無ければ最初の使う食事）にする。朝だけのときに夕方の記録が晩に入らないように。
+function qPickSlot(t){if(!current)return t;const set=qMealSlots(qStartInfo(view.date)),order=Object.keys(slots);if(set.includes(t))return t;return [...set].reverse().find(k=>order.indexOf(k)<order.indexOf(t))||set[0]||t}
 function qKey(){return view.date+'|'+qSlot()}
 function qDraft(){if(!quickDrafts.has(qKey()))quickDrafts.set(qKey(),{items:[],replace:false,recordId:null});return quickDrafts.get(qKey())}
 // 表示用。下書きが無ければ作らずに空を返す（描画で、破棄した枠に空の下書きを作り直さない）。
@@ -42,7 +44,8 @@ function qAddAndOpen(names){const d=qDraft();let first=null;for(const name of na
 function qStockNames(b){const names=(b.foodIds||[]).map(id=>food(id)?.name).filter(Boolean);return names.length?names:[b.name.slice(0,60)]}
 async function qUseStock(b){const names=qStockNames(b),moved=view.page!=='today';const ok=await mutate('adjust',{id:b.id,delta:-1,reason:'今日の記録に使う'},b.name+'を1個減らしました。量を選んで記録してください。');if(!ok)return false;view.page='today';view.todayMode='quick';if(view.date!==jstDate()){view.date=jstDate();view.selected=null}qAddAndOpen(names);if(moved)$('#main').scrollTo(0,0);return true}
 // 「食材を選んで記録」の朝・昼・夕の切り替え。日付は「今日」画面の上の日付バー（#viewDate は1つだけ）で選ぶ。
-function qSlotsMarkup(){return `<div class="qContext"><div class="qSlots" role="group" aria-label="記録する食事">${Object.entries(slots).map(([k,v])=>`<button data-q="slot" data-slot="${k}" aria-pressed="${qSlot()===k}">${v}${quickDrafts.get(view.date+'|'+k)?.items.length?'<span class="qDraftDot" aria-label="入力途中">・</span>':''}</button>`).join('')}</div></div>`}
+// 1.2.1: 並べるのは「使う食事」と、いま選んでいる食事（使う食事の外の記録を直すとき）だけ。
+function qSlotsMarkup(){const use=qMealSlots(qStartInfo(view.date));return `<div class="qContext"><div class="qSlots" role="group" aria-label="記録する食事">${Object.entries(slots).filter(([k])=>use.includes(k)||qSlot()===k).map(([k,v])=>`<button data-q="slot" data-slot="${k}" aria-pressed="${qSlot()===k}">${v}${quickDrafts.get(view.date+'|'+k)?.items.length?'<span class="qDraftDot" aria-label="入力途中">・</span>':''}</button>`).join('')}</div></div>`}
 function qFoodResultsMarkup(){const draft=qDraftView(),selected=new Set(draft.items.map(i=>i.name)),catalog=qCatalog(),eaten=qEatenFoods();return `<div class="qFoods">${catalog.map(name=>{const d=draft.items.find(i=>i.name===name)||qDefaults(name);return `<div class="qFoodTile ${selected.has(name)?'selected':''}"><button class="qFood" data-q="food" data-name="${esc(name)}" aria-pressed="${selected.has(name)}" data-edit><b>${esc(name)}</b>${eaten.has(name)?'':'<span class="qFirstBadge">はじめて</span>'}</button><button class="qFoodDose" data-q="food-amount" data-name="${esc(name)}" aria-label="${esc(name)}の量を変更" data-edit>${selected.has(name)?esc(qAmount(d)):d.fromPrevious?'<small>前回</small><span>'+esc(qAmount(d))+'</span>':'量＋'}</button></div>`}).join('')}</div>${!quickSearch&&qCatalog(true).length>12?`<button class="linkButton qCatalogMore" data-q="catalog">${quickCatalogExpanded?'少なく表示':'ほかの食材を見る（'+(qCatalog(true).length-12)+'）'}</button>`:''}${!catalog.length?`<button class="full" data-q="add-search" data-edit>「${esc(quickSearch)}」を追加</button>`:''}`}
 // ===== 「今日」画面（1.2.0）=====
 // 上から「今日のメニュー」「これからのメニュー」「期限が近いストック」の3ブロックだけ（1.1.x の「明日のおすすめ」は「これからのメニュー」に統合）。
@@ -59,8 +62,14 @@ function tNeedsStock(d){return !state().batches.some(b=>b.quantity>0)&&!meals(d)
 function todayWelcomeCard(){return `<section class="tBlock tWelcome" id="todayWelcome" aria-labelledby="welcomeTitle"><h2 id="welcomeTitle">まず、冷凍庫にストックを入れましょう</h2><ol class="tWelcomeSteps"><li>冷凍庫にストックを入れる</li><li>日ごとのメニューが自動で出ます</li><li>食べたら「食べた」を押すだけ</li></ol><button class="primary full" data-action="newBatch" data-edit>ストックを入れる</button></section>`}
 // 呼び名・時期が未設定のときだけの1行。時期で食事の回数と量の目安が決まるため。
 function tSetupLine(){return state().child.name&&qStageKey()?'':`<p class="tSetup">${state().child.name?'時期':'呼び名と時期'}を設定すると、回数と量の目安が合います。<button class="linkButton" data-action="profile" data-edit>設定する</button></p>`}
-// その日に並べる食事。枠は使い切り提案と同じ決め方（qMealSlots）で、献立・記録のある枠は必ず出す（枠を外しても既存の献立・記録は消えない）。
-function tSlots(d){const set=new Set(qMealSlots(qStartInfo(d)));for(const p of meals(d))set.add(p.slot);return Object.keys(slots).filter(s=>set.has(s))}
+// その日に並べる食事。枠は使い切り提案と同じ決め方（qMealSlots）。
+// 1.2.1: 使う食事の外の枠は、献立・記録があっても主役（ふつうのカード・行）には出さない。消さずに tOutsideSlots で畳んだ1行にする（症状1「朝だけなのに晩が出る」の修正）。
+function tSlots(d){const set=new Set(qMealSlots(qStartInfo(d)));return Object.keys(slots).filter(s=>set.has(s))}
+function tOutsideSlots(d){const use=tSlots(d);return Object.keys(slots).filter(s=>!use.includes(s)&&meals(d).some(p=>p.slot===s))}
+const tOutsideLabel='（使う食事に入っていません）';
+function tOutsideName(d,slot){const p=meals(d).find(x=>x.slot===slot);if(!p)return '';const n=tMealNames(p,record(p));return n.length?n.join('・'):p.title}
+// 使い切り提案の在庫の差し引き・はじめての食材の数えに入れる献立か。今日以降の使う食事の外の献立は、取り出し・記録が無ければ入れない（食べない前提）。
+function qPlanCounts(p,today=jstDate()){return p.prepared||Boolean(record(p))||p.date<today||qMealSlots(qStartInfo(p.date)).includes(p.slot)}
 // その日（明日以降も可）の使い切り提案。提案エンジン（qSuggest）は変えず、前の日を基準日として呼ぶと最初の日がその日になる。
 function tSuggestFor(d){if(d<jstDate())return null;return qSuggest(plusDate(d,-1))?.days.find(x=>x.date===d)||null}
 // 「食べた」1タップの量。①その子の前回の量（qDefaults と同じ基準）②今の時期の目安の幅の中央（g・初期は小さじ1）③どちらも無ければ量を入れない（推定しない）。
@@ -81,35 +90,65 @@ function tMealMarkup(d,slot,day){
  else if(m&&!m.taken&&m.add.length)body=`<div class="tEmpty"><small>おすすめ：${esc(m.add.map(i=>i.name).join('・'))}</small><button class="primary" data-action="suggestMeal" data-date="${d}" data-slot="${slot}" data-edit>おすすめを入れる</button></div>`;
  else body=`<div class="tEmpty"><small>${d>=jstDate()?'ストックが足りません':'献立はまだありません。'}</small></div>`;
  const rep=p&&!r&&!p.prepared&&!planStockConflict(p).length?tReplaceMeal(d,slot,p.id):null;
- const foot=[r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',rep?`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`:'',p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'',p&&!p.quickCreated?`<button class="linkButton" data-action="editPlan" data-id="${p.id}" data-edit>献立を直す</button>`:'',!p?`<button class="linkButton" data-t="free-slot" data-slot="${slot}" data-edit>自分で選んで記録</button>`:''].filter(Boolean).join('');
- return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${headTitle}${pill}</div>${body}${foot?`<div class="tMealFoot">${foot}</div>`:''}</article>`;
+ const foot=[r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',rep?`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`:'',p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'',!p?`<button class="linkButton" data-t="free-slot" data-slot="${slot}" data-edit>自分で選んで記録</button>`:''].filter(Boolean).join('');
+ // 1.2.1: 食材の追加・変更の入口を常に見える形に（1.2.0 の「献立を直す」リンクを置き換え）。開くのは既存の食事編集（tEditMeal）。
+ return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${headTitle}${pill}</div>${body}${tEditMealButton(d,slot)}${foot?`<div class="tMealFoot">${foot}</div>`:''}</article>`;
+}
+function tEditMealButton(d,slot){return `<button class="tEditMeal" data-t="edit-meal" data-date="${d}" data-slot="${slot}" aria-label="${esc(slots[slot])}の食材を足す・変える" data-edit>＋ 食材を足す／変える</button>`}
+// 「食材を足す／変える」。記録済みならその記録の訂正（食材を選んで記録の訂正モード）、献立があれば献立の編集、無ければその日・その食事の献立の追加を開く。
+// 品数が日数の目安（qMealLimit）に達していたら、開く前に短く伝える（開くのは止めない）。
+function tEditMeal(date,slot){
+ const p=meals(date).find(x=>x.slot===slot),r=p&&record(p),info=qStartInfo(date),cap=qMealLimit(info).cap,n=p?tMealNames(p,r).length:0;
+ if(info.day!==null&&n>=cap)showStatus(`いまは1食${cap}品が目安です。`);
+ if(r){if($('#dialog').open)closeDialog();view.page='today';view.todayMode='quick';view.todayFree=true;view.date=p.date;view.quickSlot=p.slot;qEditDraft(r);quickAmountRow=null;render();qJump($('#freeComposer'));return 'record'}
+ if(p){planForm(p);return 'plan'}
+ planForm(null,date,slot);return 'new';
 }
 // その日の食事がすべて同じ1種類の食材だけのとき（ストックが1種類だけのとき等）、並びが間違いに見えないよう1行の注記を出す。組み立てや提案の内容は変えない。
 function tSameFoodNote(d){const withNames=meals(d).map(p=>tMealNames(p,record(p))).filter(n=>n.length);if(withNames.length<2)return '';const food=withNames[0].length===1?withNames[0][0]:null;if(!food||!withNames.every(n=>n.length===1&&n[0]===food))return '';return '<p class="small muted tSameFoodNote">ストックが1種類だけなので、同じ食材が並んでいます</p>'}
 // 使う食事（朝・昼・晩）の切り替え（1.2.0、1.1.x の「1日の回数」を置き換え）。押すとプロフィールの mealSlots として保存され（data-action="mealSlot"）、
 // 今日のメニュー・これからのメニュー・使い切り提案・ストック追加時の自動反映に反映される。押された状態は qMealSlots の結果（自動のときも今の枠）を表示する。
-function tMealSlotsBar(d){const cur=qMealSlots(qStartInfo(d));const btns=Object.entries(slots).map(([k,v])=>`<button data-action="mealSlot" data-slot="${k}" aria-pressed="${cur.includes(k)}" data-edit>${v}</button>`).join('');const outside=meals(d).some(p=>!cur.includes(p.slot));return `<div class="tMealCount"><span class="tMealCountLabel">使う食事</span><span class="tMealCountBtns">${btns}</span></div>${outside?'<p class="small muted">使わない食事の献立・記録も、消えずに残っています。</p>':''}`}
+function tMealSlotsBar(d){const cur=qMealSlots(qStartInfo(d));const btns=Object.entries(slots).map(([k,v])=>`<button data-action="mealSlot" data-slot="${k}" aria-pressed="${cur.includes(k)}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">使う食事</span><span class="tMealCountBtns">${btns}</span></div>`}
+// 1.2.1: 使う食事の外の枠にある献立・記録。消さずに、畳んだ1行（開くと従来のカード）で出す。
+function tOutsideMarkup(d){return tOutsideSlots(d).map(slot=>`<details class="tOutside" data-outside-slot="${slot}"><summary>${slots[slot]}：${esc(tOutsideName(d,slot))}<small>${tOutsideLabel}</small></summary>${tMealMarkup(d,slot,null)}</details>`).join('')}
+// 1.2.1: 今日のメニューの下の1行。始めてからの日数の区分（qMealSteps と同じ 6・20・30日目）ごとに、品数と食事の回数の目安を短く伝える。日数が分からなければ汎用の1行。
+function tStepLine(d){
+ const info=qStartInfo(d),day=info.day;let t;
+ if(info.source==='period'||day===null||day<1)t='進み具合に合わせて、品数と回数が少しずつ増えます。';
+ else if(day<=6)t=`いまは始めて${day}日目です。最初のうちは1食1品（主食だけ）が目安なので、メニューはおかゆ中心になります。`;
+ else if(day<=20)t=`いまは始めて${day}日目です。1日1回、1食2品（主食と野菜・果物）までが目安です。`;
+ else if(day<=30)t=`いまは始めて${day}日目です。1日1回、1食3品（主食・主菜・副菜）までが目安です。主菜は豆腐・白身魚などから。`;
+ else t=`いまは始めて${day}日目です。1食3品（主食・主菜・副菜）までが目安で、食事は1日${qSuggestMeals[info.stage]||(day<=120?2:3)}回が目安です。`;
+ return `<p class="small muted tStepLine">${t}</p>`;
+}
 // 「おすすめに変える」用：対象の献立が無いものとして計算した、その日のその食事の提案。エンジン（qSuggest）の組み立ては変えず、同期計算の間だけ献立を外して戻す（画面には出ない）。記録済み・準備済みの食事には使わない。
 function tReplaceMeal(d,slot,planId){const plans=state().plans,i=plans.findIndex(p=>p.id===planId);if(i<0)return null;const removed=plans[i];plans.splice(i,1);try{return tSuggestFor(d)?.meals.find(m=>m.slot===slot&&!m.taken&&m.add.length)||null}finally{plans.splice(i,0,removed)}}
-function todayMealsBlock(){const d=view.date,day=tSuggestFor(d);return `<section class="tBlock tMeals" id="todayMeals" aria-labelledby="todayMealsTitle"><h2 id="todayMealsTitle">${d===jstDate()?'今日':'この日'}のメニュー</h2>${tMealSlotsBar(d)}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}</section>`}
+function todayMealsBlock(){const d=view.date,day=tSuggestFor(d);return `<section class="tBlock tMeals" id="todayMeals" aria-labelledby="todayMealsTitle"><h2 id="todayMealsTitle">${d===jstDate()?'今日':'この日'}のメニュー</h2>${tMealSlotsBar(d)}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}${tOutsideMarkup(d)}${tStepLine(d)}</section>`}
 // これからのメニュー（1.2.0）。明日〜6日後を日ごとに、日付と各食事の食材名だけ。献立があればその食材、無ければ使い切り提案（qSuggest、明日から）のプレビュー。
 // 「入れる」は従来の suggestPlan（その日の提案を planMany で一度に入れる。プレビューと同じ qSuggest の結果を使う）。
 // 提案が作れない食事がある日は「ストックが足りません」の1行だけ（理由の長文は出さない）。提案の決め方は折りたたみの中に残す。
+// 1.2.1: 日付を押すとその日がその場で開き（view.upOpen）、食事ごとに「おすすめに変える／おすすめを入れる」「食材を足す／変える」が押せる（開く→押すだけ）。
+// 使う食事の外の枠の献立は、畳んだ1行（使う食事に入っていません）だけ。
+function tUpActions(d,slot,p,m){
+ let rec='';
+ if(p){if(!record(p)&&!p.prepared&&!planStockConflict(p).length&&tReplaceMeal(d,slot,p.id))rec=`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`}
+ else if(m&&!m.taken&&m.add.length)rec=`<button class="linkButton" data-action="suggestMeal" data-date="${d}" data-slot="${slot}" data-src="up" data-edit>おすすめを入れる</button>`;
+ return `<span class="tUpActions">${rec}${tEditMealButton(d,slot)}</span>`;
+}
 function tUpcomingDay(d,s){
- const day=s?.days.find(x=>x.date===d),ps=meals(d);let short=false;
+ const day=s?.days.find(x=>x.date===d),ps=meals(d),open=view.upOpen===d;let short=false;
  const rows=tSlots(d).map(slot=>{
-  const p=ps.find(x=>x.slot===slot);
-  if(p){const n=tMealNames(p,record(p));return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames">${esc(n.length?n.join('・'):p.title)}</span></li>`}
-  const m=day?.meals.find(x=>x.slot===slot);
-  if(m&&!m.taken&&m.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>おすすめ</small>${m.add.map(i=>esc(i.name)+(i.first?'<span class="qFirstBadge">はじめて</span>':'')).join('・')}</span></li>`;
-  if(!m||!m.items.length)short=true;return '';
- }).join('');
+  const p=ps.find(x=>x.slot===slot),m=p?null:day?.meals.find(x=>x.slot===slot),act=()=>open?tUpActions(d,slot,p,m):'';
+  if(p){const n=tMealNames(p,record(p));return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames">${esc(n.length?n.join('・'):p.title)}</span>${act()}</li>`}
+  if(m&&!m.taken&&m.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>おすすめ</small>${m.add.map(i=>esc(i.name)+(i.first?'<span class="qFirstBadge">はじめて</span>':'')).join('・')}</span>${act()}</li>`;
+  if(!m||!m.items.length)short=true;return open?`<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>まだありません</small></span>${act()}</li>`:'';
+ }).join('')+tOutsideSlots(d).map(slot=>`<li class="tUpSlot tUpOutside"><small>${slots[slot]}：${esc(tOutsideName(d,slot))}${tOutsideLabel}</small></li>`).join('');
  const can=Boolean(day?.meals.some(m=>!m.taken&&m.add.length));
- return `<li class="tUpDay" data-up-date="${d}"><div class="tUpHead"><b>${esc(dateLabel(d))}</b>${can?`<button class="tUpAdd" data-action="suggestPlan" data-date="${d}" aria-label="${esc(dateLabel(d))}のおすすめを献立に入れる" data-edit>入れる</button>`:''}</div>${rows?`<ul class="tUpSlots">${rows}</ul>`:''}${short?'<p class="small muted tUpShort">ストックが足りません</p>':''}</li>`;
+ return `<li class="tUpDay${open?' open':''}" data-up-date="${d}"><div class="tUpHead"><button class="tUpDate" data-t="up-open" data-date="${d}" aria-expanded="${open}" aria-label="${esc(dateLabel(d))}のメニューを${open?'閉じる':'開いて直す'}"><b>${esc(dateLabel(d))}</b><small>${open?'閉じる':'直す'}</small></button>${can?`<button class="tUpAdd" data-action="suggestPlan" data-date="${d}" aria-label="${esc(dateLabel(d))}のおすすめを献立に入れる" data-edit>入れる</button>`:''}</div>${rows?`<ul class="tUpSlots">${rows}</ul>`:''}${short?'<p class="small muted tUpShort">ストックが足りません</p>':''}</li>`;
 }
 function todayUpcomingBlock(){
  const s=qSuggest(),days=Array.from({length:6},(_,i)=>plusDate(jstDate(),i+1));
- return `<section class="tBlock tUpcoming" id="todayUpcoming" aria-labelledby="upcomingTitle"><h2 id="upcomingTitle">これからのメニュー</h2><ul class="tUpDays">${days.map(d=>tUpcomingDay(d,s)).join('')}</ul>${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</section>`;
+ return `<section class="tBlock tUpcoming" id="todayUpcoming" aria-labelledby="upcomingTitle"><h2 id="upcomingTitle">これからのメニュー</h2><ul class="tUpDays">${days.map(d=>tUpcomingDay(d,s)).join('')}</ul>${s&&s.unknown.length?`<p class="small muted tUpUnknown">主食・主菜・副菜が分からず、メニューに使っていないストック：${esc(s.unknown.join('・'))}（冷凍庫のカードの「含まれる食材を直す」で使えます）</p>`:''}${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</section>`;
 }
 // 期限が近いストック。冷凍庫から期限が近い順に最大3件、名前と「あと○日」だけ。押すとカードの詳細が開く。
 function todayStockBlock(){const list=stockSorted(state().batches.filter(b=>b.quantity>0&&stockExpiry(b))).slice(0,3);return `<section class="tBlock tStock" id="todayStock" aria-labelledby="todayStockTitle"><h2 id="todayStockTitle">期限が近いストック</h2>${list.length?list.map(b=>`<button class="tStockRow" data-action="stockDetail" data-id="${b.id}"><span>${esc(b.name)}</span>${stockBadge(b)}</button>`).join('')+'<p class="small muted">「あと○日」は作った日から7日の目安です。</p>':'<p class="small muted">期限の近いストックはありません。</p>'}</section>`}
@@ -214,6 +253,8 @@ function tAdjust(date,slot,name){
 document.addEventListener('click',async e=>{const b=e.target.closest('button[data-t]');if(!b||b.disabled||!current)return;const a=b.dataset.t;
  if(a==='free'){view.todayFree=!view.todayFree;render();if(view.todayFree)qJump($('#freeComposer'));return}
  if(a==='free-slot'){view.quickSlot=b.dataset.slot;view.todayFree=true;quickAmountRow=null;render();qJump($('#freeComposer'));return}
+ if(a==='up-open'){view.upOpen=view.upOpen===b.dataset.date?null:b.dataset.date;render();return}
+ if(a==='edit-meal'){if(slots[b.dataset.slot])tEditMeal(b.dataset.date,b.dataset.slot);return}
  // 古い表示（別の日付）のボタンでは記録しない。
  if((a==='ate'||a==='adjust')&&b.dataset.date!==view.date){showError('表示している日と違うため記録しませんでした。表示を更新しました。');render();return}
  if(a==='ate')await tAte(b.dataset.date,b.dataset.slot,b.dataset.name);
@@ -264,6 +305,12 @@ const qSuggestSlots={1:['breakfast'],2:['breakfast','dinner'],3:['breakfast','lu
 // ③自動（qMealCount の回数から同じ読み替え。開始30日目までは朝のみ）。今日の食事・提案・自動反映はすべてこれを使う。
 function qSetSlots(){const a=state().child?.mealSlots;return Array.isArray(a)?Object.keys(slots).filter(k=>a.includes(k)):[]}
 function qMealSlots(info){const set=qSetSlots();return set.length?set:qSuggestSlots[qMealCount(info)]}
+// 1.2.1: 使う食事が明示設定（mealSlots か mealsPerDay）かどうか。どちらも無ければ「自動」。
+function qSlotsExplicit(){return qSetSlots().length>0||[1,2,3].includes(state().child?.mealsPerDay)}
+// 1.2.1: 今日画面のトグルを押したときの次の枠。自動のときに「付いている」枠を押すのは「その食事だけにする」として扱う
+// （自動で朝・晩が付いて見える状態で朝を押すと晩だけが残り、「朝しか押していないのに晩が出る」と誤解されるため）。
+// 自動で「付いていない」枠を押したら通常どおり足し、明示設定があるときは常に通常の足し引きにする。
+function qSlotTap(cur,k){if(!qSlotsExplicit()&&cur.includes(k))return [k];return Object.keys(slots).filter(x=>x===k?!cur.includes(x):cur.includes(x))}
 // 量の目安の分類表（qFoodGroups）に無いが、提案の区分だけは分かる食材。量の目安は出さない（qSuggestGuide は分類表だけを見る）。
 const qSuggestExtraRoles={'うどん':'主食','卵黄':'主菜','10倍がゆ':'主食','5倍がゆ':'主食','7倍がゆ':'主食','軟飯':'主食'};
 function qLotRole(b){for(const n of qStockNames(b)){const g=qFoodGroup(n);if(g)return qSuggestRoles.find(r=>r[1].includes(g))[0];const extra=qSuggestExtraRoles[String(n||'').trim()];if(extra)return extra}return null}
@@ -297,7 +344,8 @@ function qShortStage(info){if(qEarly(info))return '初期';const s=info.stage;if
 function qPlanFoodNames(p){const known=new Set(state().foods.map(f=>f.name)),out=new Set(qPlanNames(p));for(const u of p.uses||[]){const b=batch(u.batchId);if(!b)continue;if((b.foodIds||[]).length)qStockNames(b).forEach(n=>out.add(n));else{const n=b.name.slice(0,60);if(known.has(n)||qFoodGroup(n))out.add(n)}}return [...out]}
 // 予定として差し引く個数。日付を問わず、まだ取り出しておらず記録もない献立が対象（過去日の取り忘れも含む）。
 // その日に「今日の記録に使う」で同じロットを減らし済みなら、実在庫に反映済みなので重ねて差し引かない（二重減らし防止と同じ判定）。
-function qSuggestReserved(){const reserved=new Map();for(const p of state().plans){if(p.prepared||record(p))continue;for(const u of p.uses){if(stockUsedForRecord(u.batchId,p.date))continue;reserved.set(u.batchId,(reserved.get(u.batchId)||0)+u.quantity)}}return reserved}
+// 1.2.1: 今日以降の使う食事の外の献立（取り出し・記録なし）は差し引かない（qPlanCounts）。外した晩の献立がストックを押さえて、朝のおすすめが足りなくなるのを防ぐ。
+function qSuggestReserved(){const reserved=new Map(),today=jstDate();for(const p of state().plans){if(p.prepared||record(p)||!qPlanCounts(p,today))continue;for(const u of p.uses){if(stockUsedForRecord(u.batchId,p.date))continue;reserved.set(u.batchId,(reserved.get(u.batchId)||0)+u.quantity)}}return reserved}
 // 提案の品ごとの量の目安。ロットの食材がすべて同じ1分類のときだけ、量表（qGuideTable）の値を短く返す。表に無い時期・分類や複数分類のロットは空（数値を作らない）。
 function qSuggestGuide(names,stage){const groups=[...new Set(names.map(qFoodGroup))];if(!stage||groups.length!==1||!groups[0]||names.some(n=>qNoGuideFoods.has(String(n||'').trim())))return '';if(stage==='初期')return '小さじ1から、様子を見ながら少しずつ';if(qGuideTotalGroups.has(groups[0]))return '';const range=qGuideTable[stage]?.[groups[0]];return range?range.join('〜')+'g（'+qGuideLabels[groups[0]]+'）':''}
 function qSuggest(today=jstDate()){
@@ -360,7 +408,17 @@ function qSuggestPlan(date,m){const items=m.add||m.items;return {date,slot:m.slo
 // ストックの新規登録が成功したあと、今日から最大7日の空いている食事枠へおすすめを自動で入れる（1.1.4）。提案の窓は今日からにするため、qSuggest には前日を渡す（tSuggestFor と同じやり方）。
 // 記録・準備済み・手入力の献立がある枠は提案側で taken になるので触らない。在庫は減らない（献立に入れるだけ）。
 // 取り消し（直前の操作の復元）で自動で入れた分だけが戻るよう、反映は planMany の1回にまとめる。入る枠が無ければ何もしない（通知も出さない）。
-async function qAutoApplySuggest(){const s=qSuggest(plusDate(jstDate(),-1));if(!s)return false;const plans=[];for(const day of s.days)for(const m of day.meals)if(!m.taken&&m.add.length)plans.push(qSuggestPlan(day.date,m));if(!plans.length)return false;const from=plans[0].date,to=plans[plans.length-1].date;return mutate('planMany',{plans},from===to?`ストックに合わせて、${dateLabel(from)}の空いている食事におすすめを入れました。`:`ストックに合わせて、${dateLabel(from)}〜${dateLabel(to)}の空いている食事におすすめを入れました。`)}
+// 1.2.1: 前に自動で入れたおすすめ（qAutoPlan）も、新しいストックを含めて組み立て直す（症状4「ストックを足しても10倍がゆしか出ない」の修正）。
+// 計算の間だけその献立を外して提案を作り（tReplaceMeal と同じやり方・画面には出ない）、中身が変わる枠だけ同じ id で入れ直す。入れ直しも同じ planMany の1回なので、取り消しで一緒に戻る。
+function qAutoPlan(p,today){if(p.date<=today||p.prepared||record(p)||p.note!=='使い切り提案から入れた献立です。'||!p.uses.length||!p.uses.every(u=>u.quantity===1&&batch(u.batchId)))return false;return p.title===p.uses.map(u=>batch(u.batchId).name).join('・').slice(0,100)&&qMealSlots(qStartInfo(p.date)).includes(p.slot)}
+async function qAutoApplySuggest(){
+ const today=jstDate(),all=state().plans,auto=all.filter(p=>qAutoPlan(p,today)),at=auto.map(p=>all.indexOf(p));let s;
+ for(let k=at.length-1;k>=0;k--)all.splice(at[k],1);
+ try{s=qSuggest(plusDate(today,-1))}finally{for(let k=0;k<at.length;k++)all.splice(at[k],0,auto[k])}
+ if(!s)return false;const plans=[],key=x=>JSON.stringify(x.uses.map(u=>u.batchId).sort());let redo=0;
+ for(const day of s.days)for(const m of day.meals){if(m.taken||!m.add.length)continue;const x=qSuggestPlan(day.date,m),old=auto.find(p=>p.date===day.date&&p.slot===m.slot);if(old){if(key(old)===key(x))continue;x.id=old.id;redo++}plans.push(x)}
+ if(!plans.length)return false;const from=plans[0].date,to=plans[plans.length-1].date,range=from===to?dateLabel(from):`${dateLabel(from)}〜${dateLabel(to)}`;
+ return mutate('planMany',{plans},plans.length>redo?`ストックに合わせて、${range}の空いている食事におすすめを入れました。${redo?`前に自動で入れたおすすめ${redo}食も入れ直しました。`:''}`:`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`)}
 // 提案の根拠は、文章の塊にせず「見出し：短い本文」の行に分ける。補足（切り替わりの日・数え方）は本文の下に小さく残す。どれも「目安」と書く。
 function qSuggestFact(label,body,notes=[]){const n=notes.filter(Boolean);return `<li class="qSuggestFact"><b class="qFactLabel">${label}</b><span class="qFactBody">${body}${n.length?`<small class="qFactNote">${n.join('／')}</small>`:''}</span></li>`}
 // 品数（開始からの日数・時期）・回数・主菜の範囲・組み合わせの決まり。数え方の元が分からないときは、設定の場所を1行で案内する。

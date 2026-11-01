@@ -1,6 +1,6 @@
 'use strict';
 // 公開のたびに必ず変える（変えないと既存の端末に新版が届かない）。index.html の meta mogubiyori-version と設定画面の版表示もそろえる。
-const VERSION='mogubiyori-web-1.2.0';
+const VERSION='mogubiyori-web-1.2.1';
 const FILES=['./','./index.html','./app.js','./quick.js','./drafts.js','./local-store.js','./web.js','./style.css','./icon.svg','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable.png','./guide.html','./privacy.html','./guide.css'];
 const urls=FILES.map(p=>new URL(p,self.registration.scope).href);
 // Include the scope in the name so another install on the same origin is untouched.

@@ -230,6 +230,20 @@ span.tRowMain{border-style:dashed}
 .tUpShort{margin:2px 0 0}
 .tUpWhy{margin-top:8px}
 .tUpWhy>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;color:var(--muted)}
+/* 1.2.1: 食材を足す／変える・使う食事の外の畳んだ1行・日数の説明・これからのメニューの日タップ */
+.tEditMeal{display:block;width:100%;margin:6px 0 2px;min-height:44px;padding:6px 12px;border-radius:12px;font-size:14px;background:transparent;border:1px dashed var(--line)}
+.tOutside{border-top:1px solid var(--line);padding:2px 0}
+.tOutside>summary{cursor:pointer;min-height:44px;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.tOutside>summary small{font-size:12px}
+.tOutside .tMeal{border-top:0;opacity:.85}
+.tStepLine{margin:8px 0 0;line-height:1.6}
+.tUpDate{display:flex;align-items:baseline;gap:8px;min-height:40px;padding:4px 0;background:transparent;border:0;text-align:left;color:inherit}
+.tUpDate small{font-size:12px;color:var(--muted);text-decoration:underline}
+.tUpSlot{flex-wrap:wrap}
+.tUpActions{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:0 0 6px 2.6em}
+.tUpActions .linkButton{font-size:13px;min-height:44px;padding:4px 2px}
+.tUpActions .tEditMeal{width:auto;margin:0}
+.tUpOutside{color:var(--muted)}
 .tWelcomeSteps{margin:4px 0 14px;padding-left:1.4em;line-height:1.9}
 .mealSlotsField{border:0;padding:0;margin-inline:0}
 .mealSlotsChoices{display:flex;gap:16px;flex-wrap:wrap}
