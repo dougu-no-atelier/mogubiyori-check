@@ -190,6 +190,7 @@ body{overflow-wrap:anywhere}
 /* 2026-11-01（1.1.0）: 全体の簡素化。「今日」は 今日の食事／明日のおすすめ／期限が近いストック の3ブロック、冷凍庫のカードは3点だけ、記録は1行のまとめ＋日ごとのリスト。 */
 .tHead{margin-bottom:6px}
 .tSetup{margin:8px 0 0;padding:8px 12px;border-radius:12px;background:var(--lime);font-size:13px;line-height:1.6}
+.tMealCount{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 2px}.tMealCountLabel{font-size:13px;color:var(--muted)}.tMealCountBtns{display:flex;gap:6px}.tMealCountBtns button{min-height:40px;padding:6px 16px;border-radius:999px}.tMealCountBtns button[aria-pressed="true"]{background:var(--ink);color:var(--white);border-color:var(--ink)}
 .tSetup .linkButton{min-height:44px;padding:4px 6px}
 .tBlock{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--white);min-width:0}
 .tBlock>h2,.tBlock>.sectionhead h2{margin:0 0 8px;font-size:18px}
