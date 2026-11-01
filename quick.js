@@ -169,8 +169,9 @@ function tMealSlotsBar(d){const cur=qMealSlots(qStartInfo(d));const btns=Object.
 function tOutsideMarkup(d){return tOutsideSlots(d).map(slot=>`<details class="tOutside" data-outside-slot="${slot}"><summary>${slots[slot]}：${esc(tOutsideName(d,slot))}<small>${tOutsideLabel}</small></summary>${tMealMarkup(d,slot,null)}</details>`).join('')}
 // 1.2.1: 今日のメニューの下の1行。始めてからの日数の区分（qMealSteps と同じ 6・20・30日目）ごとに、品数と食事の回数の目安を短く伝える。日数が分からなければ汎用の1行。
 function tStepLine(d){
- const info=qStartInfo(d),day=info.day;let t;
- if(info.source==='period'||day===null||day<1)t='進み具合に合わせて、品数と回数が少しずつ増えます。';
+ const info=qStartInfo(d),day=info.day,setItems=qItemsPerMeal();let t;
+ if(setItems)t=`1食${setItems}品に設定中です。`;
+ else if(info.source==='period'||day===null||day<1)t='進み具合に合わせて、品数と回数が少しずつ増えます。';
  else if(day<=6)t=`いまは始めて${day}日目です。最初のうちは1食1品（主食だけ）が目安なので、メニューはおかゆ中心になります。`;
  else if(day<=20)t=`いまは始めて${day}日目です。1日1回、1食2品（主食と野菜・果物）までが目安です。`;
  else if(day<=30)t=`いまは始めて${day}日目です。1日1回、1食3品（主食・主菜・副菜）までが目安です。主菜は豆腐・白身魚などから。`;
@@ -287,6 +288,11 @@ function quickDock(){const d=qDraftView();if(!d.items.length)return '';return `<
 function qSetItems(source,id){return source==='template'?state().templates.find(t=>t.id===id)?.items:state().records.find(r=>r.id===id)?.items}
 function qFill(items){const d=qDraft();d.items=qEditableItems(items).map(i=>({...i,fromPrevious:true}));quickAmountRow=null;render();document.querySelector('.qBasket')?.scrollIntoView({block:'nearest',behavior:'instant'})}
 async function qSave(items,options={}){const date=view.date,slot=qSlot(),key=qKey();if(options.fromDraft&&qDraftStale(key,quickDrafts.get(key))){qDropStaleDrafts();render();showError('献立の内容が変わったため、記録しませんでした。今の献立から選び直してください。');return false}const ok=await mutate('quickLog',{date,slot,items:qItems(items),replace:Boolean(options.replace),recordId:options.recordId||undefined,allowRepeat:Boolean(options.allowRepeat),expectedRecord:options.replace?options.baseRecord:undefined},options.replace?'食材と量を訂正しました。在庫は変えていません。':'食材と量をまとめて記録しました。',{draftKey:options.fromDraft?key:null,draftValue:options.fromDraft?JSON.stringify(qDraft()):null});if(ok){if(options.fromDraft)quickDrafts.delete(key);quickAmountRow=null;render()}return ok}
+// 量の選択で量を決めたとき（1.3.1）。訂正（replace）の下書きなら、下書き（食材・量の一式）ごとその場で保存し、量の画面も閉じる。
+// 背後の「この内容に訂正」をもう一度押す二度手間を無くす。様子・メモは別の保存（recordForm）で即時保存される仕組みなので、
+// ここで一緒に保存する未保存分はクイック下書きだけ。新規の記録の下書き（複数食材の組み立て途中）は従来どおり、量を入れて閉じるだけ。
+// 保存まで終わったら true（保存に失敗したら量の画面は閉じず false）。
+async function qAmountDecided(){const d=qDraft();if(!d.replace||!d.items.length)return false;const ok=await qSave(d.items,{...d,fromDraft:true,allowRepeat:false});if(ok)qCloseAmount();return ok}
 async function qPin(items){const data=qItems(items);if(state().templates.some(t=>qSignature(t.items)===qSignature(data))){showStatus('この組み合わせは固定済みです。');return}await mutate('template',{items:data},'いつもの一食に固定しました。次回はカード一回で記録できます。')}
 // 記録済みの一食を、訂正用の下書き（replace）にする。保存は従来どおり quickLog の replace（expectedRecord で別タブの変更を検出）。
 function qEditDraft(r){const draft=qDraft();draft.items=qEditableItems(r.items||r.foodIds.map(foodId=>({foodId,amount:null,unit:''})));draft.replace=true;draft.recordId=r.id;draft.baseRecord=JSON.parse(JSON.stringify(r));return draft}
@@ -300,7 +306,8 @@ async function tAte(date,slot,name){
  if(ok){const d=quickDrafts.get(key);if(d&&!d.replace){d.items=d.items.filter(i=>i.name!==name);if(!d.items.length)quickDrafts.delete(key)}draftPersist();render()}
  return ok;
 }
-// 行を押したときの調整。従来の量の選択（qOpenAmount）を開き、保存は下の「この食材・量で記録」（未記録）／「この内容に訂正」（記録済み）で行う。
+// 行を押したときの調整。従来の量の選択（qOpenAmount）を開く。未記録は保存を下の「この食材・量で記録」で行い、
+// 記録済み（訂正）の下書きは量を決めた時点で下書きごと保存する（1.3.1・qAmountDecided）。
 function tAdjust(date,slot,name){
  view.quickSlot=slot;quickStaleNote='';const p=meals(date).find(x=>x.slot===slot),r=p&&record(p);let d=qDraft();
  if(r&&tRecordedItem(r,name)&&!(d.replace&&d.recordId===r.id)){const pending=d.replace?[]:d.items.slice();d=qEditDraft(r);for(const i of pending)if(!d.items.some(x=>x.name===i.name))d.items.push(i)}
@@ -337,13 +344,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='food-amount'){let n=d.items.findIndex(i=>i.name===b.dataset.name);if(n<0){d.items.push(qDefaults(b.dataset.name));n=d.items.length-1}render();qOpenAmount(n)}
  if(a==='amount')qOpenAmount(row)
  if(a==='unit'){if(d.items[row].unit!==b.dataset.unit){d.items[row].unit=b.dataset.unit;d.items[row].amount=null;d.items[row].fromPrevious=false}qOpenAmount(row)}
- if(a==='quantity'){d.items[row].amount=b.dataset.amount;if(!d.items[row].unit)d.items[row].unit=qDefaultUnit();d.items[row].fromPrevious=false;qRememberUnit(d.items[row].unit);qCloseAmount();render()}
- if(a==='bump'){const n=qBumpAmount(row);if(n){d.items[row].amount=n.amount;d.items[row].unit=n.unit;d.items[row].fromPrevious=false;qRememberUnit(n.unit);qCloseAmount();render()}}
- if(a==='unknown'){d.items[row].amount=null;d.items[row].fromPrevious=false;qCloseAmount();render()}
+ if(a==='quantity'){d.items[row].amount=b.dataset.amount;if(!d.items[row].unit)d.items[row].unit=qDefaultUnit();d.items[row].fromPrevious=false;qRememberUnit(d.items[row].unit);if(!await qAmountDecided()){qCloseAmount();render()}}
+ if(a==='bump'){const n=qBumpAmount(row);if(n){d.items[row].amount=n.amount;d.items[row].unit=n.unit;d.items[row].fromPrevious=false;qRememberUnit(n.unit);if(!await qAmountDecided()){qCloseAmount();render()}}}
+ if(a==='unknown'){d.items[row].amount=null;d.items[row].fromPrevious=false;if(!await qAmountDecided()){qCloseAmount();render()}}
  if(a==='remove'){d.items.splice(row,1);quickAmountRow=null;render()}
  if(a==='clear'){quickDrafts.delete(qKey());quickAmountRow=null;render()}
  if(a==='save')await qSave(d.items,{...d,fromDraft:true,allowRepeat:!d.replace&&qApplied(d.items)});
- if(a==='exact-done'){const i=d.items[quickAmountRow];if(i.amount!=null&&(!/^\d{1,4}(?:\.\d{1,2})?$/.test(String(i.amount))||Number(i.amount)>9999)){showError('量をゼロ以上、小数二桁までで入力してください。');return}if(i.amount!=null)qRememberUnit(i.unit);qCloseAmount();render()}
+ if(a==='exact-done'){const i=d.items[quickAmountRow];if(i.amount!=null&&(!/^\d{1,4}(?:\.\d{1,2})?$/.test(String(i.amount))||Number(i.amount)>9999)){showError('量をゼロ以上、小数二桁までで入力してください。');return}if(i.amount!=null)qRememberUnit(i.unit);if(!await qAmountDecided()){qCloseAmount();render()}}
  if(a==='log-set'){const items=qSetItems(b.dataset.source,b.dataset.id);if(items)await qSave(items)}
  if(a==='adjust-set'){const items=qSetItems(b.dataset.source,b.dataset.id);if(items)qFill(items)}
  if(a==='pin-draft'&&d.items.length)await qPin(d.items);
@@ -387,7 +394,10 @@ function qStartInfo(d=jstDate()){const set=qStartedOn(),stage=qStageKey();if(set
 // 1回の品数の目安（使い切り提案の1食あたりの上限）。日数区分は厚労省「授乳・離乳の支援ガイド」の進め方
 // （つぶしがゆ1品から→慣れたら野菜→たんぱく質→2回食の頃から主食・主菜・副菜）をもとにした目安で、断定しない。日数も時期も分からなければ従来どおり3品まで。
 const qMealSteps=[[6,1,['主食']],[20,2,['主食','副菜']],[30,3,['主食','主菜','副菜']],[Infinity,3,['主食','主菜','副菜']]];
-function qMealLimit(info){if(info.day===null)return {cap:3,roles:['主食','主菜','副菜']};const s=qMealSteps.find(s=>info.day<=s[0]);return {cap:s[1],roles:s[2]}}
+// 1食の品数の手動設定（プロフィールの任意項目 itemsPerMeal、1.3.1）。設定があれば日数区分より優先する（区分の対応は qMealSteps と同じ）。
+// 開始30日目までの主菜の食材制限（qEarly／qEarlyMainOk）は日数基準のままで、ここでは変えない。
+function qItemsPerMeal(){const v=state().child?.itemsPerMeal;return [1,2,3].includes(v)?v:0}
+function qMealLimit(info){const set=qItemsPerMeal();if(set)return {cap:set,roles:qMealSteps[set-1][2]};if(info.day===null)return {cap:3,roles:['主食','主菜','副菜']};const s=qMealSteps.find(s=>info.day<=s[0]);return {cap:s[1],roles:s[2]}}
 // 開始30日目まで（開始日数が分かるときだけ）は、食事を1日1回にし、主菜は初期向けの食材（豆腐・白身魚・卵黄・しらす）に限る。31日目からと日数不明のときは従来どおり。
 const qEarlyDays=30,qEarlyMains=['豆腐','白身魚','鯛','ひらめ','たら','かれい','卵黄','しらす'];
 function qEarly(info){return info.day!==null&&info.day<=qEarlyDays}
