@@ -209,6 +209,9 @@ span.tRowMain{border-style:dashed}
 .tRow.done .tRowMain{background:#f4f1e6}
 .tAte{flex:none;min-height:52px;min-width:88px;padding:8px 14px;border-radius:999px;background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
 .tDone{flex:none;font-size:12px;font-weight:700;color:var(--green)}
+.tStep{flex:none;display:flex;gap:6px}
+.tStep button{width:44px;min-height:52px;padding:6px 0;border-radius:999px;font-size:19px;font-weight:700;line-height:1}
+.jFreeLink{margin:2px 0 10px}
 .tEmpty{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
 .tEmpty small{flex:1;min-width:0;color:var(--muted);font-size:13px}
 .tMealFoot{display:flex;flex-wrap:wrap;gap:0 12px}
@@ -328,4 +331,4 @@ span.tRowMain{border-style:dashed}
 .tWeekToggle{margin:0 0 6px}
 .tHead+.tabs{margin-top:10px}
 .tHead+.jMoreTop{margin-top:0}
-@media(max-width:400px){.tUpActions{padding-left:0}.tUpSlot .tAddPick{margin-left:0}.tAte{min-width:72px;padding:8px 10px}.tRemove{width:36px}.tRow{gap:6px}.tMealCountLabel{min-width:0;flex-basis:100%}}
+@media(max-width:400px){.tUpActions{padding-left:0}.tUpSlot .tAddPick{margin-left:0}.tAte{min-width:72px;padding:8px 10px}.tRemove{width:36px}.tRow{gap:6px}.tMealCountLabel{min-width:0;flex-basis:100%}.tStep button{width:38px;min-height:48px}.tDone{display:none}}
