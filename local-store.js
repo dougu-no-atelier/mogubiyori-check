@@ -79,6 +79,7 @@ window.MoguLocal = (() => {
    case 'batch':{const b={id:uid(),name:text(d.name,'ストック名',100,true),quantity:0,madeOn:day(d.madeOn),checkOn:d.checkOn?day(d.checkOn):'',portion:text(d.portion??'','一個の量',100),location:text(d.location??'','保存場所',100),shape:text(d.shape??'','形状',100),foodIds:foodIds(s,d.foods??[]),...portion(d)};s.batches.push(b);event(s,b,count(d.quantity),'補充',actor,op);break}
    // 既存ロットの1個分の量を設定・変更・未設定に戻す。個数・履歴は変えない。
    case 'batchPortion':{const b=find(s.batches,d.id),p=portion(d);delete b.portionAmount;delete b.portionUnit;Object.assign(b,p);break}
+   case 'batchFoods':{const b=find(s.batches,d.id);b.foodIds=foodIds(s,d.foods??[]);break}
    case 'adjust':{need(Number.isInteger(d.delta)&&d.delta!==0&&Math.abs(d.delta)<=9999);event(s,find(s.batches,d.id),d.delta,text(d.reason||'数え直し','変更理由',100,true),actor,op);break}
    case 'plan':savePlan(s,d);break;
    // 使い切り提案の「この日の提案を献立に入れる」。1日分（最大3食）を1回の操作でまとめて登録する（取り消しも1回で戻る）。中身は通常の献立と同じ。
@@ -93,6 +94,7 @@ window.MoguLocal = (() => {
     if(r.items){r.items=r.items.map(i=>r.foodIds.includes(i.foodId)&&i.intake==='not_eaten'?{...i,amount:null,intake:'confirmed'}:i);for(const id of r.foodIds)if(!r.items.some(i=>i.foodId===id))r.items.push({foodId:id,amount:null,unit:'',intake:'confirmed'})}
     for(const k of ['memo','symptom','observedAt'])if(k in d)r[k]=text(d[k],'食事の補足',2000);if('eatenAt'in d){need(!d.eatenAt||!Number.isNaN(Date.parse(d.eatenAt)),'食事時刻を確認してください。');r.eatenAt=d.eatenAt?new Date(d.eatenAt).toISOString():''}break;
    }
+   case 'removeRecord':{const p=find(s.plans,d.id),i=s.records.findIndex(r=>r.planId===p.id);need(i>=0,'消す記録が見つかりません。');s.records.splice(i,1);if(p.prepared){for(const u of p.uses)event(s,find(s.batches,u.batchId),u.quantity,'記録の削除による戻し',actor,op,p.id);p.prepared=false}break}
    // 記録・準備済みの献立は、食事の記録（日付は献立の日付から決まる）と取り出し済みの在庫を動かさないよう、元の枠に残したまま同じ献立を移動先に入れる（移動先が空いているときだけ）。
    // 記録・準備済みの献立の写しは、ストックの使用（uses）を引き継がない（在庫連動なし）。引き継ぐと元と写しの両方から同じロットを取り出せてしまうため。
    case 'move':{const p=find(s.plans,d.id),free=p=>!p.prepared&&!s.records.some(r=>r.planId===p.id);day(d.date);need(slots.includes(d.slot));const other=s.plans.find(x=>x!==p&&x.date===d.date&&x.slot===d.slot);if(!free(p)){need(d.date!==p.date||d.slot!==p.slot,'移動先を別の日・時間帯にしてください。');need(!other,'移動先には献立があります。記録・準備済みの食事は、空いている枠に同じ献立を入れられます。');s.plans.push({id:uid(),date:d.date,slot:d.slot,title:p.title,note:p.note,foodIds:[...p.foodIds],uses:[],prepared:false});break}if(other){need(free(other),'移動先は準備・記録済みです。');other.date=p.date;other.slot=p.slot}p.date=d.date;p.slot=d.slot;break}

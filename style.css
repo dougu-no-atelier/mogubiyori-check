@@ -187,3 +187,71 @@ body{overflow-wrap:anywhere}
 .qFoodTile{grid-template-columns:minmax(0,1fr) fit-content(50%)}
 .qWeekDetail strong{white-space:normal;text-align:right}
 .batchChoice>span{min-width:0}
+/* 2026-11-01（1.1.0）: 全体の簡素化。「今日」は 今日の食事／明日のおすすめ／期限が近いストック の3ブロック、冷凍庫のカードは3点だけ、記録は1行のまとめ＋日ごとのリスト。 */
+.tHead{margin-bottom:6px}
+.tSetup{margin:8px 0 0;padding:8px 12px;border-radius:12px;background:var(--lime);font-size:13px;line-height:1.6}
+.tSetup .linkButton{min-height:44px;padding:4px 6px}
+.tBlock{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--white);min-width:0}
+.tBlock>h2,.tBlock>.sectionhead h2{margin:0 0 8px;font-size:18px}
+.tBlock>.sectionhead{margin:0}
+.tMeal{padding:10px 0;border-top:1px solid var(--line);min-width:0}
+.tMeal:first-of-type{border-top:0;padding-top:2px}
+.tMealHead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:6px}
+.tMealHead h3{margin:0;font-size:16px;color:#7d3925}
+.tMealTitle{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.tMealHead .pill{max-width:12em}
+.tRow{display:flex;align-items:center;gap:8px;margin:6px 0;min-width:0}
+.tRowMain{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;text-align:left;padding:8px 12px;min-height:52px;border:1px solid var(--line);border-radius:14px;background:#fffaf2}
+span.tRowMain{border-style:dashed}
+.tRowMain b{min-width:0}
+.tRowMain small{flex-basis:100%;font-size:12px;color:var(--muted)}
+.tRow.done .tRowMain{background:#f4f1e6}
+.tAte{flex:none;min-height:52px;min-width:88px;padding:8px 14px;border-radius:999px;background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+.tDone{flex:none;font-size:12px;font-weight:700;color:var(--green)}
+.tEmpty{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
+.tEmpty small{flex:1;min-width:0;color:var(--muted);font-size:13px}
+.tMealFoot{display:flex;flex-wrap:wrap;gap:0 12px}
+.tMealFoot .linkButton{font-size:13px;min-height:44px;padding:4px 2px}
+.tSuggestMeals{list-style:none;margin:4px 0 10px;padding:0;display:grid;gap:6px}
+.tSuggest .primary.full{margin:4px 0 6px}
+.tSuggest>.sectionhead small{color:var(--muted);font-size:13px}
+.tStockRow{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;padding:6px 10px;margin:4px 0;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
+.tStockRow>span:first-child{flex:1;min-width:0}
+.tStockRow .stockDue{flex:none;margin-left:0}
+.tMore{margin:20px 0 8px}
+.tMore>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:650;color:var(--muted)}
+.tMoreList{display:grid;gap:8px;margin:6px 0}
+.tMoreList button{width:100%;text-align:left;white-space:normal}
+.tNote{margin:8px 0 0;font-size:13px;line-height:1.6}
+.tFree{margin:16px 0}
+.tFree>.sectionhead h2{margin:0;font-size:18px}
+.qDraftSummary .linkButton{min-height:40px;padding:2px 0;font-size:13px}
+/* 冷凍庫のカード（名前／残り／あと○日）と詳細 */
+.packOpen{display:grid;gap:4px;width:100%;min-width:0;padding:0;text-align:left;border:0;background:transparent;border-radius:0;color:inherit;white-space:normal}
+.packOpen h3{margin:0}
+.packLeft{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
+.packOpen .stockDue{justify-self:start;margin-left:0}
+.pack.packEmpty{opacity:.7}
+.stockDetailLeft{margin:6px 0 10px}
+.stockDetailLeft .stockAmount{font-size:14px;color:var(--muted)}
+.stockFacts{display:grid;gap:4px;margin:0 0 12px;font-size:14px}
+.stockFacts>div{display:grid;grid-template-columns:7em minmax(0,1fr);gap:8px}
+.stockFacts dt{color:var(--muted)}.stockFacts dd{margin:0;min-width:0}
+.stockDetailCount{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
+.qSuggestBriefLine{margin:4px 0;font-size:14px;line-height:1.6}
+.qSuggestMore>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:14px;font-weight:650}
+/* 記録タブ */
+.jSummary{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:var(--white);border:1px solid var(--line)}
+.jSummary b{font-size:13px}
+.jSummary .qWeekSummary{margin:2px 0 0}
+.jDay{margin:12px 0}
+.jDay>h3{margin:0 0 6px;font-size:14px;color:var(--muted)}
+.jEntry{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;margin:0 0 6px;padding:8px 12px;text-align:left;border:1px solid var(--line);border-radius:14px;background:var(--white);white-space:normal}
+.jSlot{flex:none;font-weight:700;color:#7d3925}
+.jBody{flex:1;min-width:0;display:grid}
+.jBody small{font-size:12px;color:var(--muted)}
+.jEntry .pill{flex:none;max-width:9em}
+.jMore{margin:18px 0}
+.jMore>.linkButton{min-height:44px}
+.jMore>.tabs{margin-top:10px}
+.usageNotes{margin:0 0 10px;padding-left:1.2em;display:grid;gap:6px;font-size:14px;line-height:1.7}
