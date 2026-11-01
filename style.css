@@ -230,6 +230,15 @@ span.tRowMain{border-style:dashed}
 .tUpShort{margin:2px 0 0}
 .tUpWhy{margin-top:8px}
 .tUpWhy>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;color:var(--muted)}
+/* 1.4.0 統合「メニュー」: 今日の日見出し・「メニューにないものを記録」・開いた日の中の「この日のおすすめを入れる」 */
+.tMenuDayHead{display:flex;align-items:baseline;gap:8px;margin:10px 0 2px}
+.tMenuDayHead b{font-size:15px}
+.tMenuTodayMark{font-size:12px;font-weight:700;color:var(--green)}
+.tMenuWeek{margin-top:10px;border-top:1px solid var(--line)}
+.tFreeLink{margin:8px 0 2px}
+.tFreeLink .linkButton{font-size:13px;min-height:44px;padding:4px 2px}
+.tUpDayActions{padding:2px 0 6px}
+.tUpAddIn{flex:none;min-height:44px;padding:6px 16px;border-radius:999px;background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
 /* 1.2.1: 食材を足す／変える・使う食事の外の畳んだ1行・日数の説明・これからのメニューの日タップ */
 .tEditMeal{display:block;width:100%;margin:6px 0 2px;min-height:44px;padding:6px 12px;border-radius:12px;font-size:14px;background:transparent;border:1px dashed var(--line)}
 .tOutside{border-top:1px solid var(--line);padding:2px 0}
