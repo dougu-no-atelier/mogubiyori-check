@@ -216,6 +216,24 @@ span.tRowMain{border-style:dashed}
 .tSuggestMeals{list-style:none;margin:4px 0 10px;padding:0;display:grid;gap:6px}
 .tSuggest .primary.full{margin:4px 0 6px}
 .tSuggest>.sectionhead small{color:var(--muted);font-size:13px}
+/* 1.2.0 これからのメニュー・初回案内・プロフィールの使う食事 */
+.tUpDays,.tUpSlots{list-style:none;margin:0;padding:0}
+.tUpDay{padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
+.tUpDay:last-child{border-bottom:0}
+.tUpHead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px}
+.tUpAdd{min-height:40px;padding:6px 16px;border-radius:999px}
+.tUpSlot{display:flex;gap:10px;align-items:baseline;padding:2px 0;min-width:0}
+.tUpLabel{flex:none;width:2em;color:var(--muted);font-size:13px}
+.tUpNames{flex:1;min-width:0;overflow-wrap:anywhere}
+.tUpSuggest .tUpNames{color:var(--muted)}
+.tUpSuggest .tUpNames small{margin-right:6px;font-size:12px}
+.tUpShort{margin:2px 0 0}
+.tUpWhy{margin-top:8px}
+.tUpWhy>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:13px;color:var(--muted)}
+.tWelcomeSteps{margin:4px 0 14px;padding-left:1.4em;line-height:1.9}
+.mealSlotsField{border:0;padding:0;margin-inline:0}
+.mealSlotsChoices{display:flex;gap:16px;flex-wrap:wrap}
+.mealSlotsChoices .checkLabel{border-bottom:0}
 .tStockRow{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;padding:6px 10px;margin:4px 0;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
 .tStockRow>span:first-child{flex:1;min-width:0}
 .tStockRow .stockDue{flex:none;margin-left:0}
