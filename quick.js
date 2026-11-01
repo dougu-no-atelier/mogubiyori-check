@@ -165,6 +165,9 @@ function tSameFoodNote(d){const withNames=meals(d).map(p=>tMealNames(p,record(p)
 // 使う食事（朝・昼・晩）の切り替え（1.2.0、1.1.x の「1日の回数」を置き換え）。押すとプロフィールの mealSlots として保存され（data-action="mealSlot"）、
 // 今日のメニュー・これからのメニュー・使い切り提案・ストック追加時の自動反映に反映される。押された状態は qMealSlots の結果（自動のときも今の枠）を表示する。
 function tMealSlotsBar(d){const cur=qMealSlots(qStartInfo(d));const btns=Object.entries(slots).map(([k,v])=>`<button data-action="mealSlot" data-slot="${k}" aria-pressed="${cur.includes(k)}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">使う食事</span><span class="tMealCountBtns">${btns}</span></div>`}
+// 1食の品数（自動／1品／2品／3品）の切り替え（1.3.2）。「使う食事」と同じ流儀で、押すとプロフィールの itemsPerMeal として保存され（data-action="itemsPerMeal"）、
+// 今日のメニュー・使い切り提案・「＋食材を足す」の上限・説明行に反映される。押された状態は qItemsPerMeal の実効状態（0＝自動）を表示する。
+function tItemsBar(){const cur=qItemsPerMeal();const btns=[[0,'自動'],[1,'1品'],[2,'2品'],[3,'3品']].map(([n,v])=>`<button data-action="itemsPerMeal" data-value="${n||''}" aria-pressed="${cur===n}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">1食の品数</span><span class="tMealCountBtns">${btns}</span></div>`}
 // 1.2.1: 使う食事の外の枠にある献立・記録。消さずに、畳んだ1行（開くと従来のカード）で出す。
 function tOutsideMarkup(d){return tOutsideSlots(d).map(slot=>`<details class="tOutside" data-outside-slot="${slot}"><summary>${slots[slot]}：${esc(tOutsideName(d,slot))}<small>${tOutsideLabel}</small></summary>${tMealMarkup(d,slot,null)}</details>`).join('')}
 // 1.2.1: 今日のメニューの下の1行。始めてからの日数の区分（qMealSteps と同じ 6・20・30日目）ごとに、品数と食事の回数の目安を短く伝える。日数が分からなければ汎用の1行。
@@ -180,7 +183,7 @@ function tStepLine(d){
 }
 // 「おすすめに変える」用：対象の献立が無いものとして計算した、その日のその食事の提案。エンジン（qSuggest）の組み立ては変えず、同期計算の間だけ献立を外して戻す（画面には出ない）。記録済み・準備済みの食事には使わない。
 function tReplaceMeal(d,slot,planId){const plans=state().plans,i=plans.findIndex(p=>p.id===planId);if(i<0)return null;const removed=plans[i];plans.splice(i,1);try{return tSuggestFor(d)?.meals.find(m=>m.slot===slot&&!m.taken&&m.add.length)||null}finally{plans.splice(i,0,removed)}}
-function todayMealsBlock(day=tSuggestFor(view.date)){const d=view.date;return `<section class="tBlock tMeals" id="todayMeals" aria-labelledby="todayMealsTitle"><h2 id="todayMealsTitle">${d===jstDate()?'今日':'この日'}のメニュー</h2>${tMealSlotsBar(d)}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}${tOutsideMarkup(d)}${tStepLine(d)}</section>`}
+function todayMealsBlock(day=tSuggestFor(view.date)){const d=view.date;return `<section class="tBlock tMeals" id="todayMeals" aria-labelledby="todayMealsTitle"><h2 id="todayMealsTitle">${d===jstDate()?'今日':'この日'}のメニュー</h2>${tMealSlotsBar(d)}${tItemsBar()}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}${tOutsideMarkup(d)}${tStepLine(d)}</section>`}
 // これからのメニュー（1.2.0）。明日〜6日後を日ごとに、日付と各食事の食材名だけ。献立があればその食材、無ければ使い切り提案（qSuggest、明日から）のプレビュー。
 // 「入れる」は従来の suggestPlan（その日の提案を planMany で一度に入れる。プレビューと同じ qSuggest の結果を使う）。
 // 提案が作れない食事がある日は「ストックが足りません」の1行だけ（理由の長文は出さない）。提案の決め方は折りたたみの中に残す。
