@@ -88,7 +88,8 @@ function tRemoveButton(d,slot,name){return `<button class="tRemove" data-t="remo
 // 「＋ 食材を足す」で開く候補。ストック（残り個数つき・期限が近い順）を先に、次に食材の一覧（登録済みの食材→量の目安の分類表の食材）。入っている食材は出さない。
 function tAddPicker(d,slot){
  if(view.addOpen!==tAddOpenKey(d,slot))return '';
- const p=meals(d).find(x=>x.slot===slot),have=new Set(p?qPlanNames(p):[]),attrs=`data-date="${d}" data-slot="${slot}"`;
+ // 1.4.7: 候補は下書きに対して開く（下書きに入っている食材は出さない）。編集中でなければ保存済みの食材が基準。
+ const p=meals(d).find(x=>x.slot===slot),dr=tPlanDraft(d,slot),have=new Set(dr?dr.names:(p?qPlanNames(p):[])),attrs=`data-date="${d}" data-slot="${slot}"`;
  const stock=stockSorted(state().batches.filter(b=>b.quantity>0)).filter(b=>!qStockNames(b).every(n=>have.has(n))),inStock=new Set(stock.flatMap(qStockNames));
  const hidden=new Set(state().foods.filter(f=>f.quickHidden).map(f=>f.name));
  const master=[...new Set([...state().foods.map(f=>f.name),...Object.values(qFoodGroups).flat(),...Object.keys(qSuggestExtraRoles)])].filter(n=>!have.has(n)&&!inStock.has(n)&&!hidden.has(n));
@@ -103,34 +104,64 @@ async function qLinkedReplan(date,slot){const p=meals(date).find(x=>x.slot===slo
 // 足す・外すの保存。通常の献立保存（plan）1回なので、通知の「取り消す」で戻る。在庫は変えない。
 // 題名が食材の列挙（提案から入れた献立・自動作成など）なら新しい食材で付け直し、手で付けた題名はそのまま。おすすめ由来の献立は「直した献立」の印に変える（自動の入れ直しの対象から外れる）。
 function tPlanEdit(p,names){const was=p?qPlanNames(p):[],listTitle=!p||!was.length||p.note===qSuggestNote||p.title===was.join('・')||p.title===p.uses.map(u=>batch(u.batchId)?.name).join('・');return {title:(listTitle?names.join('・'):p.title).slice(0,100),note:p?(p.note===qSuggestNote?qEditedNote:p.note):''}}
-async function tAddFood(date,slot,batchId,name){
+// ===== 1.4.7: カードの上・開いた日の ×／＋ は「下書き」方式（押すまで保存しない） =====
+// ユーザーの声（2026-11-03）:「ここ開いたら元に戻せないから、決定か戻るみたいなボタン欲しい」。
+// ×／＋ は保存済みの献立には触らず、画面状態だけの下書き（planDrafts）を変える。下書きは保存データに一切混ぜない
+// （localStorage/IndexedDB には書かず、再描画では render が下書きを読んで描くので消えない。ページ再読み込みでは消える＝未保存は保存されない）。
+// 保存済みと下書きが違う間だけ「決定」「戻る」を出し（tPlanDraft が常に差分のある下書きだけを返す）、
+// 決定＝最終内容から1回の献立保存（題名・印・ストック使用は tPlanEdit の規則）＋連動の組み直し1回、戻る＝下書きを捨てるだけ。
+// 日を閉じる／別の日を開く／日付・画面を切り替えると、残っていた下書きは捨てる（tClearPlanDrafts を各遷移で呼ぶ）。
+const planDrafts=new Map();
+function tDraftBase(d,slot){const p=meals(d).find(x=>x.slot===slot);return {names:p?qPlanNames(p):[],uses:p?p.uses.map(u=>({batchId:u.batchId,quantity:u.quantity})):[]}}
+function tDraftClean(d,slot){const k=tAddOpenKey(d,slot),dr=planDrafts.get(k);if(dr&&JSON.stringify(dr)===JSON.stringify(tDraftBase(d,slot)))planDrafts.delete(k)}
+function tPlanDraft(d,slot){tDraftClean(d,slot);return planDrafts.get(tAddOpenKey(d,slot))||null}
+function tDraftEnsure(d,slot){const k=tAddOpenKey(d,slot);if(!planDrafts.has(k))planDrafts.set(k,tDraftBase(d,slot));return planDrafts.get(k)}
+function tClearPlanDrafts(){planDrafts.clear()}
+const tDraftButtons=(d,slot)=>`<span class="tDraftBtns"><button class="dark" data-t="draft-ok" data-date="${d}" data-slot="${slot}" data-edit>決定</button><button data-t="draft-cancel" data-date="${d}" data-slot="${slot}" data-edit>戻る</button></span>`;
+// 候補（ピッカー）で選ぶ＝下書きに足すだけ。保存は「決定」を押すまでしない。品数の上限は下書きの品数で見る。
+async function tDraftAdd(date,slot,batchId,name){
  const p=meals(date).find(x=>x.slot===slot);
  if(!tInlineEditable(p)){showError('記録済み・準備済みの食事は、カードの下のボタンから直してください。表示を新しくしました。');render();return false}
  const b=batchId?batch(batchId):null;if(batchId&&(!b||b.quantity<=0)){showError('このストックは残りがありません。表示を新しくしました。');render();return false}
  const add=b?qStockNames(b):[String(name||'').trim()].filter(Boolean);if(!add.length)return false;
- const was=p?qPlanNames(p):[],info=qStartInfo(date),cap=qMealLimit(info).cap;
- // 品数の目安（tEditMeal と同じ判定）。上限なら足さずに短く伝える。
- if(info.day!==null&&was.length>=cap){showStatus(`いまは1食${cap}品が目安です。`);return false}
- const names=[...new Set([...was,...add])];if(names.length===was.length){showStatus(add.join('・')+'は入っています。');return false}
- const uses=p?p.uses.map(u=>({batchId:u.batchId,quantity:u.quantity})):[];if(b&&!uses.some(u=>u.batchId===b.id))uses.push({batchId:b.id,quantity:1});
- const t=tPlanEdit(p,names);
- const ok=await mutate('plan',{id:p?.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${dateLabel(date)}の${slots[slot]}に${add.join('・')}を足しました。在庫は変えていません。`);
- if(ok)await qLinkedReplan(date,slot);
- return ok;
+ const info=qStartInfo(date),cap=qMealLimit(info).cap,cur=planDrafts.get(tAddOpenKey(date,slot));
+ // 品数の目安（tEditMeal と同じ判定）。下書きの品数で数え、上限なら足さずに短く伝える（下書きも作らない）。
+ if(info.day!==null&&(cur?cur.names.length:(p?qPlanNames(p).length:0))>=cap){showStatus(`いまは1食${cap}品が目安です。`);return false}
+ const dr=tDraftEnsure(date,slot);
+ let changed=false;for(const n of add)if(!dr.names.includes(n)){dr.names.push(n);changed=true}
+ if(!changed){showStatus(add.join('・')+'は入っています。');tDraftClean(date,slot);render();return true}
+ if(b&&!dr.uses.some(u=>u.batchId===b.id))dr.uses.push({batchId:b.id,quantity:1});
+ tDraftClean(date,slot);render();return true;
 }
-async function tRemoveFood(date,slot,name){
+// × ＝下書きから外すだけ。外す食材を含むストックの使用も下書きの中でいっしょに外す（残すと決定の保存でその食材が戻るため）。
+// 最後の1品も外せる（1.4.6 の扱いを下書きでも維持）。全部外れた下書きで決定すると、枠は空（tIsHusk）になる。
+function tDraftRemove(date,slot,name){
  const p=meals(date).find(x=>x.slot===slot);
  if(!p||!tInlineEditable(p)){showError('記録済み・準備済みの食事は、カードの下のボタンから直してください。表示を新しくしました。');render();return false}
- const was=qPlanNames(p);if(!was.includes(name)){render();return false}
- // 外す食材を含むストックの使用もいっしょに外す（残すと献立の保存でその食材が戻るため）。
- // 1.4.6: 最後の1品も外せる（「おすすめに変える」は廃止）。全部外れると枠は空になり（tIsHusk）、おすすめのプレビューが戻る。
- // 空になるときはストック使用も全部外し、題名は保存の必須条件のため今の題名を残す（表示は空の枠として扱うので出ない）。
- const names=was.filter(n=>n!==name),uses=names.length?p.uses.filter(u=>{const b=batch(u.batchId);return !(b&&qStockNames(b).includes(name))}).map(u=>({batchId:u.batchId,quantity:u.quantity})):[];
- const t=tPlanEdit(p,names);if(!names.length)t.title=p.title;
- const ok=await mutate('plan',{id:p.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${name}を外しました。在庫は変えていません。`);
- if(ok)await qLinkedReplan(date,slot);
- return ok;
+ const dr=tDraftEnsure(date,slot);
+ if(!dr.names.includes(name)){tDraftClean(date,slot);render();return false}
+ dr.names=dr.names.filter(n=>n!==name);
+ dr.uses=dr.names.length?dr.uses.filter(u=>{const b=batch(u.batchId);return !(b&&qStockNames(b).includes(name))}):[];
+ tDraftClean(date,slot);render();return true;
 }
+// 決定：下書きの最終内容で献立を1回だけ保存する（通知はその1回・取り消し可）。保存できたら下書きを捨て、連動の組み直しを1回走らせる。
+// 空の下書きで決定したときは 1.4.6 の空の枠（殻）に一致させる（ストック使用も全部外し、題名は保存の必須条件のため今の題名を残す）。
+async function tDraftCommit(date,slot){
+ const k=tAddOpenKey(date,slot),dr=planDrafts.get(k);if(!dr)return false;
+ const p=meals(date).find(x=>x.slot===slot);
+ if(!tInlineEditable(p)){planDrafts.delete(k);showError('記録済み・準備済みの食事は、カードの下のボタンから直してください。表示を新しくしました。');render();return false}
+ const names=[...dr.names];
+ if(!p&&!names.length){planDrafts.delete(k);render();return false}
+ const t=tPlanEdit(p,names);if(!names.length)t.title=p.title;
+ const uses=names.length?dr.uses.map(u=>({batchId:u.batchId,quantity:u.quantity})):[];
+ const ok=await mutate('plan',{id:p?.id,date,slot,title:t.title,note:t.note,foods:names,uses},p?`${dateLabel(date)}の${slots[slot]}の献立を直しました。在庫は変えていません。`:`${dateLabel(date)}の${slots[slot]}の献立を入れました。在庫は変えていません。`);
+ if(!ok)return false; // 保存できなかったときは下書きを残す（直し直せるように）
+ planDrafts.delete(k);if(view.addOpen===k)view.addOpen=null;
+ await qLinkedReplan(date,slot);
+ return true;
+}
+// 戻る：下書きを捨てて保存済みの表示に戻す。保存は一切しない。
+function tDraftCancel(date,slot){const k=tAddOpenKey(date,slot);planDrafts.delete(k);if(view.addOpen===k)view.addOpen=null;render()}
 // 初回案内。冷凍庫に残りのあるストックが無く、表示中の日に献立・記録も無いとき（使い切った後もここに戻る）。
 function tNeedsStock(d){return !state().batches.some(b=>b.quantity>0)&&!meals(d).length}
 function todayWelcomeCard(){return `<section class="tBlock tWelcome" id="todayWelcome" aria-labelledby="welcomeTitle"><h2 id="welcomeTitle">まず、冷凍庫にストックを入れましょう</h2><ol class="tWelcomeSteps"><li>冷凍庫にストックを入れる</li><li>日ごとのメニューが自動で出ます</li><li>食べたら「食べた」を押すだけ</li></ol><button class="primary full" data-action="newBatch" data-edit>ストックを入れる</button></section>`}
@@ -162,14 +193,16 @@ function tMealNames(p,r){
 // 1.4.4（要望1）: 記録済みの行の − ＋。− はその食材を記録から外し、＋ はその食事に食材を足す（欄＝食材そのものの増減）。
 // 1.4.2 で付けた「量のステッパー」はユーザーの意図と違ったため廃止した。量の変更は従来どおり行タップ→量の選択と「食材・量を訂正」に残る。
 function tRowBtnsMarkup(d,slot,name){return `<span class="tStep"><button data-t="row-remove" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を記録から外す" data-edit>−</button><button data-t="row-add" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="この食事に食材を足す" data-edit>＋</button></span>`}
-function tRowMarkup(d,slot,name,r,removable=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name),sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
+function tRowMarkup(d,slot,name,r,removable=false,editing=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name),sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):editing?'':`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
 function tMealMarkup(d,slot,day){
- const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p);
+ const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p),dr=tPlanDraft(d,slot);
  // 題名が食材名の列挙そのもの（提案から入れた献立など）なら、カード内の食材名と重複するので見出しには出さない。食材未登録のときは本文側で題名を出す。
  const headTitle=p&&!p.quickCreated&&names.length&&p.title&&p.title!==qPlanNames(p).join('・')?`<span class="tMealTitle">${esc(p.title)}</span>`:'',pill=r?`<span class="pill ${planRecordChanged(p,r)?'':'green'}">${esc(status(p))}</span>`:'';
  let body;
+ // 1.4.7: 下書きがある間は、下書きの食材で描く（保存済みは変えない）。編集中の行に「食べた」は出さない（記録は決定してから）。
+ if(dr)body=dr.names.length?dr.names.map(n=>tRowMarkup(d,slot,n,null,true,true)).join(''):'<p class="small muted tDraftEmpty">食材が入っていません。</p>';
  // 1.3.0: 食材ごとの「×」（外す）。足す・外すができるのは未記録・未準備の献立だけ。
- if(p&&names.length)body=names.map(n=>tRowMarkup(d,slot,n,r,inline)).join('');
+ else if(p&&names.length)body=names.map(n=>tRowMarkup(d,slot,n,r,inline)).join('');
  else if(p&&!husk)body=`<div class="tRow ${r?'done':''}"><span class="tRowMain"><b>${esc(p.title)}</b><small>${r?esc(r.result):'食材は未登録'}</small></span>${r?'<span class="tDone">記録済み</span>':`<button class="tAte" data-action="quickRecord" data-id="${p.id}" data-result="食べた" aria-label="${esc(p.title)}を食べたで記録" data-edit>食べた</button>`}</div>`;
  // 1.4.6: 空の枠（献立なし・全部外した跡）におすすめがあれば、プレビュー自体をタップして入れる。「入れる」ボタンは置かない。
  else{const m=husk?tReplaceMeal(d,slot,p.id):(day?day.meals.find(x=>x.slot===slot):null);body=m&&!m.taken&&m.add.length?`<div class="tEmpty">${tPreviewButton(m,d,slot)}</div>`:''}
@@ -177,7 +210,8 @@ function tMealMarkup(d,slot,day){
  // 「おすすめに変える」は廃止（全部外すとプレビューが戻る）。空の枠は「自分で食材を選ぶ」だけ（「献立を追加」は廃止し、これに一本化）。
  // 記録済みの操作（様子・メモ／食材・量を訂正／行の − ＋）は従来どおり。
  const prepare=p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'';
- const foot=(husk||!p)?tAddButton(d,slot,'自分で食材を選ぶ'):[inline?tAddButton(d,slot):'',prepare,r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
+ // 1.4.7: 下書きがある間は足元の操作を「＋ 食材を足す」と「決定／戻る」だけにする（出す・編集フォームは決定か戻るのあと）。
+ const foot=dr?`${tAddButton(d,slot)}${tDraftButtons(d,slot)}`:(husk||!p)?tAddButton(d,slot,'自分で食材を選ぶ'):[inline?tAddButton(d,slot):'',prepare,r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
  return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}${r?tRecAddPicker(d,slot):''}</article>`;
 }
 // 編集フォーム（tEditMeal）への入口。1.3.0 から足す・外すはカードの上でできるので、副操作の小さなリンクにした（記録済み→食材・量を訂正、献立あり→献立を編集）。
@@ -247,9 +281,11 @@ function tUpActions(d,slot,p,m){
 function tUpcomingDay(d,s,on=true){
  const day=on?s?.days.find(x=>x.date===d):null,ps=meals(d),open=view.upOpen===d;let short=false;
  const rows=tSlots(d).map(slot=>{
-  const p=ps.find(x=>x.slot===slot),m=p?null:day?.meals.find(x=>x.slot===slot),act=()=>open?tUpActions(d,slot,p,m)+(tInlineEditable(p)?tAddPicker(d,slot):''):'';
+  const p=ps.find(x=>x.slot===slot),dr=tPlanDraft(d,slot),m=p?null:day?.meals.find(x=>x.slot===slot),act=()=>!open?'':dr?`<span class="tUpActions">${tAddButton(d,slot)}${tDraftButtons(d,slot)}</span>${tAddPicker(d,slot)}`:tUpActions(d,slot,p,m)+(tInlineEditable(p)?tAddPicker(d,slot):'');
   // 1.4.5（要望A）: 閉じた状態では、食材名の並び自体をボタンにして、行をタップしてもその日が開くようにする（従来は日付の見出しだけがタップ対象で、行を押しても何も起きなかった）。
   const namesBox=inner=>open?`<span class="tUpNames">${inner}</span>`:`<button class="tUpNames tUpOpenBtn" data-t="up-open" data-date="${d}" aria-label="${esc(dateLabel(d))}の${slots[slot]}を開く">${inner}</button>`;
+  // 1.4.7: 下書きがある間は、下書きの食材（チップ）で描き、「決定／戻る」を出す。保存済みの献立は変えない。
+  if(dr){const shown=open&&dr.names.length?dr.names.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(dr.names.length?dr.names.join('・'):'食材なし');return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox(shown)}${act()}</li>`}
   if(p&&!tIsHusk(p)){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox((tFromSuggest(p)?tSuggestMark:'')+shown)}${act()}</li>`}
   // 1.4.6: 空き枠のおすすめは、閉じた行でも開いた行でもプレビュー自体がボタン（タップ＝入れる）。日を開かずに1タップで入る。
   const m2=p?tReplaceMeal(d,slot,p.id):m;
@@ -466,12 +502,16 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  // 1.4.0: メニュー内の小さなリンク「メニューにないものを記録」。1.4.2（要望3）で入口は記録タブの先頭へ移した。
  // 開く先は従来の自由記録（食材を選んで記録）で、食事の枠は指定しない。記録は今日分として開く。
  if(a==='free-menu'){view.page='today';view.todayMode='quick';view.todayFree=true;view.date=jstDate();quickAmountRow=null;render();qJump($('#freeComposer'));return}
- if(a==='up-open'){view.upOpen=view.upOpen===b.dataset.date?null:b.dataset.date;render();return}
+ // 1.4.7: 日を閉じる／別の日を開くと、残っていた献立の下書きは捨てる（決定しない限り保存されない）。
+ if(a==='up-open'){tClearPlanDrafts();view.upOpen=view.upOpen===b.dataset.date?null:b.dataset.date;render();return}
  if(a==='edit-meal'){if(slots[b.dataset.slot])tEditMeal(b.dataset.date,b.dataset.slot);return}
- // 1.3.0: カードの上の「＋ 食材を足す」（候補の開閉）・候補のタップ（足す）・食材の「×」（外す）。保存はどれも通常の献立保存（plan）。
+ // 1.3.0: カードの上の「＋ 食材を足す」（候補の開閉）・候補のタップ（足す）・食材の「×」（外す）。
+ // 1.4.7: 足す・外すは下書きだけを変え、保存は「決定」（draft-ok）で1回だけ。「戻る」（draft-cancel）は下書きを捨てる。
  if(a==='add-open'){if(!slots[b.dataset.slot])return;const k=tAddOpenKey(b.dataset.date,b.dataset.slot);view.addOpen=view.addOpen===k?null:k;render();return}
- if(a==='add-food'){if(slots[b.dataset.slot])await tAddFood(b.dataset.date,b.dataset.slot,b.dataset.batch||'',b.dataset.name||'');return}
- if(a==='remove-food'){if(slots[b.dataset.slot])await tRemoveFood(b.dataset.date,b.dataset.slot,b.dataset.name||'');return}
+ if(a==='add-food'){if(slots[b.dataset.slot])await tDraftAdd(b.dataset.date,b.dataset.slot,b.dataset.batch||'',b.dataset.name||'');return}
+ if(a==='remove-food'){if(slots[b.dataset.slot])tDraftRemove(b.dataset.date,b.dataset.slot,b.dataset.name||'');return}
+ if(a==='draft-ok'){if(slots[b.dataset.slot])await tDraftCommit(b.dataset.date,b.dataset.slot);return}
+ if(a==='draft-cancel'){if(slots[b.dataset.slot])tDraftCancel(b.dataset.date,b.dataset.slot);return}
  // 古い表示（別の日付）のボタンでは記録しない。
  if((a==='ate'||a==='adjust'||a==='row-remove'||a==='row-add'||a==='rec-pick')&&b.dataset.date!==view.date){showError('表示している日と違うため記録しませんでした。表示を更新しました。');render();return}
  if(a==='ate')await tAte(b.dataset.date,b.dataset.slot,b.dataset.name);
@@ -485,7 +525,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='input-jump'){$('#main').scrollTo(0,0);return}if(a==='week-record'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qWeekDetail(r);return}
  if(a==='record-remove'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qRemoveRecordConfirm(r);return}
  if(a==='record-remove-do'){const r=state().records.find(r=>r.id===b.dataset.id);if(r){const removed=await mutate('removeRecord',{id:r.planId},'記録を消しました。未記録に戻しました。');if(removed)closeDialog()}return}
- if(a==='legacy'){view.todayMode='legacy';render();$('#main').scrollTo(0,0);return}if(a==='quick'){view.todayMode='quick';render();$('#main').scrollTo(0,0);return}
+ if(a==='legacy'){tClearPlanDrafts();view.todayMode='legacy';render();$('#main').scrollTo(0,0);return}if(a==='quick'){tClearPlanDrafts();view.todayMode='quick';render();$('#main').scrollTo(0,0);return}
  if(a==='catalog'){quickCatalogExpanded=!quickCatalogExpanded;render();return}
  if(a==='search'){quickSearchOpen=!quickSearchOpen;if(!quickSearchOpen)quickSearch='';render();if(quickSearchOpen)$('#quickSearch').focus();return}
  if(a==='slot'){view.quickSlot=b.dataset.slot;quickAmountRow=null;render();return}
