@@ -189,6 +189,16 @@ function tStepLine(d){
  else t=`いまは始めて${day}日目です。1食3品（主食・主菜・副菜）までが目安で、食事は1日${qSuggestMeals[info.stage]||(day<=120?2:3)}回が目安です。`;
  return `<p class="small muted tStepLine">${t}</p>`;
 }
+// 1.4.3: 設定画面のプロフィール付近に出す「いまの計算に効いている始めた日」の1行。数え方は今日画面の tStepLine と同じ qStartInfo（今日の日付）で、日数も同じ値になる。
+// 始めた日が未設定で一番古い食事の記録から数えているとき・時期から決めているとき・どちらも無いときは、その旨が分かる文言にする。保存はしない。
+function qStartNowLine(d=jstDate()){
+ const i=qStartInfo(d),md=v=>{const [,m,dd]=v.split('-');return Number(m)+'月'+Number(dd)+'日'},nth=i.day>0?i.day+'日目':'まだ始める前の日付です';let t;
+ if(i.source==='profile')t=`いまの計算：始めた日 ${md(i.start)}（${nth}）`;
+ else if(i.source==='record')t=`いまの計算：始めた日が未設定のため、最初の記録（${md(i.start)}）から数えています（${nth}）`;
+ else if(i.source==='period')t=`いまの計算：始めた日が未設定のため、今の時期（${i.stage}）から品数を決めています`;
+ else t='いまの計算：始めた日も食事の記録もまだ無いため、日数では数えていません';
+ return `<p class="small muted qStartNow">${esc(t)}</p>`;
+}
 // 「おすすめに変える」用：対象の献立が無いものとして計算した、その日のその食事の提案。エンジン（qSuggest）の組み立ては変えず、同期計算の間だけ献立を外して戻す（画面には出ない）。記録済み・準備済みの食事には使わない。
 function tReplaceMeal(d,slot,planId){const plans=state().plans,i=plans.findIndex(p=>p.id===planId);if(i<0)return null;const removed=plans[i];plans.splice(i,1);try{return tSuggestFor(d)?.meals.find(m=>m.slot===slot&&!m.taken&&m.add.length)||null}finally{plans.splice(i,0,removed)}}
 // 1.4.0: 旧 todayMealsBlock（今日のメニュー）と旧 todayUpcomingBlock（これからのメニュー）は todayMenuBlock（下）に統合した。
