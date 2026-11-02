@@ -5,6 +5,8 @@ const starterFoods=['ほうれん草','おかゆ','にんじん','かぼちゃ',
 let quickSearch='',quickAmountRow=null,quickSearchOpen=false,quickCatalogExpanded=false,quickStaleNote='';
 // 1.4.1（症状B）: 記録済みの食材の行から、その食材の量だけを直接直すときの対象（{recordId,date,slot,name,item}）。訂正の下書き（ドック）は経由しない。
 let quickDirect=null;
+// 1.4.4（要望1）: 記録済みの行の ＋ から食材を1つ足すときの量の選択の対象（{recordId,date,slot,name,item}）。quickDirect と同じく量の画面を共用し、決めたら記録へ即保存する。
+let quickRecAdd=null;
 // 最後に確定した量の単位。前回記録のない食材の初期単位に使う。保存できない環境ではメモリ内だけで引き継ぐ。
 const QUICK_UNIT_KEY='mogubi-quick-unit:'+new URL('./',document.currentScript.src).pathname;
 let quickLastUnit=null;
@@ -134,10 +136,17 @@ function qGuideMid(name){const stage=qStageKey(),n=String(name||'').trim(),group
 function qOneTap(name){const d=qDefaults(name);if(d.fromPrevious)return {name,amount:String(d.amount),unit:d.unit,source:'previous'};const g=qGuideMid(name);return g?{name,...g,source:'guide'}:{name,amount:null,unit:'',source:'none'}}
 // 記録済みの食材の項目。items の無い旧記録（献立からの記録）は、食べたと確認した食材（foodIds）を量なしの「食べた」とみなす。
 function tRecordedItem(r,name){if(!r)return null;if(r.items?.length)return r.items.find(i=>qName(i)===name)||null;return r.foodIds.some(id=>food(id)?.name===name)?{amount:null,unit:'',intake:'confirmed'}:null}
-function tMealNames(p,r){return [...new Set([...(p?qPlanNames(p):[]),...(r?(r.items?.length?r.items.map(qName):r.foodIds.map(id=>food(id)?.name)):[])])].filter(Boolean)}
-// 1.4.2（要望2）: 記録済みの行の − ＋。量が入っていて単位が 小さじ・g・ml のとき（と、量が未入力のとき）だけ出す。食べなかった行には出さない。
-function tStepMarkup(d,slot,name,done){if(!done||done.intake==='not_eaten')return '';if(done.amount!=null&&done.amount!==''&&!quickUnits.includes(done.unit))return '';return `<span class="tStep"><button data-t="step" data-step="-1" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量を減らす" data-edit>−</button><button data-t="step" data-step="1" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量を増やす" data-edit>＋</button></span>`}
-function tRowMarkup(d,slot,name,r,removable=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name),sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tStepMarkup(d,slot,name,done):`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
+function tMealNames(p,r){
+ const recNames=r?(r.items?.length?r.items.map(qName):r.foodIds.map(id=>food(id)?.name)):[];let planNames=p?qPlanNames(p):[];
+ // 1.4.4（要望1）: items を持つ記録では、記録に入っていたのに今は無い食材（記録から外した食材）は献立側の名前からも出さない。
+ // offeredFoodIds は「一度でも記録に出した食材」の控えで、外した食材も残る。それが items に無ければ、行として出し直さない（外した直後に「未記録の行」として戻って見えるのを防ぐ）。
+ // items の無い旧記録（foodIds で数える形）は従来どおり。
+ if(r&&r.items){const offered=new Set((r.offeredFoodIds||[]).map(id=>food(id)?.name).filter(Boolean)),inRec=new Set(recNames);planNames=planNames.filter(n=>!offered.has(n)||inRec.has(n))}
+ return [...new Set([...planNames,...recNames])].filter(Boolean)}
+// 1.4.4（要望1）: 記録済みの行の − ＋。− はその食材を記録から外し、＋ はその食事に食材を足す（欄＝食材そのものの増減）。
+// 1.4.2 で付けた「量のステッパー」はユーザーの意図と違ったため廃止した。量の変更は従来どおり行タップ→量の選択と「食材・量を訂正」に残る。
+function tRowBtnsMarkup(d,slot,name){return `<span class="tStep"><button data-t="row-remove" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を記録から外す" data-edit>−</button><button data-t="row-add" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="この食事に食材を足す" data-edit>＋</button></span>`}
+function tRowMarkup(d,slot,name,r,removable=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name),sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
 function tMealMarkup(d,slot,day){
  const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),m=!p&&day?day.meals.find(x=>x.slot===slot):null,inline=tInlineEditable(p);
  // 題名が食材名の列挙そのもの（提案から入れた献立など）なら、カード内の食材名と重複するので見出しには出さない。食材未登録のときは本文側で題名を出す。
@@ -153,7 +162,7 @@ function tMealMarkup(d,slot,day){
  // 1.3.0: 操作は1列にまとめる（足す → おすすめに変える → 冷凍庫から出す → 様子・メモ → 編集フォーム）。
  // 1.4.0: 「自分で選んで記録」はカードから外し、今日の開いた中にある小さなリンク「メニューにないものを記録」に一本化した。
  const foot=[inline?tAddButton(d,slot):'',rep?`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`:'',p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'',r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
- return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}</article>`;
+ return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}${r?tRecAddPicker(d,slot):''}</article>`;
 }
 // 編集フォーム（tEditMeal）への入口。1.3.0 から足す・外すはカードの上でできるので、副操作の小さなリンクにした（記録済み→食材・量を訂正、献立あり→献立を編集、空き→献立を追加）。
 function tEditMealButton(d,slot){const p=meals(d).find(x=>x.slot===slot),label=p?(record(p)?'食材・量を訂正':'献立を編集'):'献立を追加';return `<button class="linkButton tEditMeal" data-t="edit-meal" data-date="${d}" data-slot="${slot}" aria-label="${esc(slots[slot])}の${label}" data-edit>${label}</button>`}
@@ -171,9 +180,9 @@ function tSameFoodNote(d){const withNames=meals(d).map(p=>tMealNames(p,record(p)
 // 使う食事（朝・昼・晩）の切り替え（1.2.0、1.1.x の「1日の回数」を置き換え）。押すとプロフィールの mealSlots として保存され（data-action="mealSlot"）、
 // 今日のメニュー・これからのメニュー・使い切り提案・ストック追加時の自動反映に反映される。押された状態は qMealSlots の結果（自動のときも今の枠）を表示する。
 function tMealSlotsBar(d){const cur=qMealSlots(qStartInfo(d));const btns=Object.entries(slots).map(([k,v])=>`<button data-action="mealSlot" data-slot="${k}" aria-pressed="${cur.includes(k)}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">使う食事</span><span class="tMealCountBtns">${btns}</span></div>`}
-// 1食の品数（自動／1品／2品／3品）の切り替え（1.3.2）。「使う食事」と同じ流儀で、押すとプロフィールの itemsPerMeal として保存され（data-action="itemsPerMeal"）、
+// 1食の品数（自動／1品〜5品）の切り替え（1.3.2、1.4.4 で 4・5品を追加）。「使う食事」と同じ流儀で、押すとプロフィールの itemsPerMeal として保存され（data-action="itemsPerMeal"）、
 // 今日のメニュー・使い切り提案・「＋食材を足す」の上限・説明行に反映される。押された状態は qItemsPerMeal の実効状態（0＝自動）を表示する。
-function tItemsBar(){const cur=qItemsPerMeal();const btns=[[0,'自動'],[1,'1品'],[2,'2品'],[3,'3品']].map(([n,v])=>`<button data-action="itemsPerMeal" data-value="${n||''}" aria-pressed="${cur===n}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">1食の品数</span><span class="tMealCountBtns">${btns}</span></div>`}
+function tItemsBar(){const cur=qItemsPerMeal();const btns=[[0,'自動'],[1,'1品'],[2,'2品'],[3,'3品'],[4,'4品'],[5,'5品']].map(([n,v])=>`<button data-action="itemsPerMeal" data-value="${n||''}" aria-pressed="${cur===n}" data-edit>${v}</button>`).join('');return `<div class="tMealCount"><span class="tMealCountLabel">1食の品数</span><span class="tMealCountBtns">${btns}</span></div>`}
 // 1.2.1: 使う食事の外の枠にある献立・記録。消さずに、畳んだ1行（開くと従来のカード）で出す。
 // 1.4.2（要望3）: 今日画面からは出さなくなった（ユーザーが不要と判断）。データは消えず、使う食事に枠を戻せば通常のカードで出る。この関数はもう今日画面からは呼ばれない。
 function tOutsideMarkup(d){return tOutsideSlots(d).map(slot=>`<details class="tOutside" data-outside-slot="${slot}"><summary>${slots[slot]}：${esc(tOutsideName(d,slot))}<small>${tOutsideLabel}</small></summary>${tMealMarkup(d,slot,null)}</details>`).join('')}
@@ -309,11 +318,11 @@ function qWeekSection(jump=true){const end=view.date>jstDate()?jstDate():view.da
 function qWeekDetail(r){const p=state().plans.find(p=>p.id===r.planId);openDialog(`<h2>${dateLabel(qRecordDay(r,p))}・${slots[p.slot]}ごはん</h2><div class="qWeekDetail">${qWeekLines(r).map(i=>`<div><b>${esc(i.name)}</b><strong>${esc(i.amount)}${i.notEaten?'（食べず）':''}</strong></div>`).join('')}</div>${r.memo?`<p class="hint">${esc(r.memo)}</p>`:''}${r.symptom?`<p class="hint">観察メモ：${esc(r.symptom)}</p>`:''}<p class="formHint">${esc(r.actor)}が記録。${r.eatenAt?'食事時刻 '+dateTimeLabel(r.eatenAt):'食事時刻は未入力'}</p>${editable()?`<div class="buttonrow"><button data-q="edit-record" data-id="${r.id}">食材・量を訂正</button><button data-action="detail" data-id="${p.id}">様子を補足</button><button data-q="record-remove" data-id="${r.id}">この食事の記録を消す</button></div>`:''}`)}
 // 記録を消して「未記録」に戻す確認。削除そのものは local-store の removeRecord（取り出し済みなら在庫も戻す）。直後は通知の「取り消す」で復元できる。
 function qRemoveRecordConfirm(r){const p=state().plans.find(p=>p.id===r.planId);if(!p)return;openDialog(`<h2>記録を消しますか</h2><p>${esc(dateLabel(qRecordDay(r,p)))}・${slots[p.slot]}ごはん（${esc(r.actualTitle||p.title)}）の記録を消して、未記録に戻します。</p>${p.prepared?'<p>冷凍庫から取り出した分は、在庫に戻します。</p>':''}<p class="formHint">消した直後は、画面下の「取り消す」でもとに戻せます。</p><div class="buttonrow"><button data-action="close">やめる</button><button class="primary" data-q="record-remove-do" data-id="${r.id}">記録を消す</button></div>`)}
-// 量の選択が直す対象。下書きの行（通常）か、記録済みの行の直接編集（quickDirect・1.4.1 症状B）か。
-function qAmountItem(row){return quickDirect?quickDirect.item:qDraft().items[row]}
+// 量の選択が直す対象。下書きの行（通常）か、記録済みの行の直接編集（quickDirect・1.4.1 症状B）か、記録への食材の追加（quickRecAdd・1.4.4 要望1）か。
+function qAmountItem(row){return quickDirect?quickDirect.item:quickRecAdd?quickRecAdd.item:qDraft().items[row]}
 function qAmountMarkup(row){const i=qAmountItem(row),unit=i.unit||qDefaultUnit(),first=qFirstEatenOn(i.name),guide=qGuideText(i.name),bump=qBumpFor(i);return `<h2>${esc(i.name)}の量</h2><p class="formHint">実際に食べた量を選びます。</p><p class="qFoodNote">${first?'はじめて食べた日：'+esc(dateLabel(first)):'はじめての食材です。様子を見ながら少しずつ。'}</p>${guide?`<p class="qGuide">${esc(guide)}</p>`:''}${bump?`<div class="qBumpRow"><span>前回 ${esc(qAmount(bump.prev))} を食べました。</span><button class="qBump" data-q="bump" data-row="${row}" data-amount="${esc(bump.amount)}">少し増やす：${esc(qAmount(bump))}</button></div>`:''}<div class="qAmountPicker"><div class="qUnitRow" role="group" aria-label="単位">${quickUnits.map(u=>`<button data-q="unit" data-unit="${u}" data-row="${row}" aria-pressed="${i.unit===u}">${u}</button>`).join('')}</div><div class="qQuantities">${(unit==='小さじ'?['0','0.5','1','2','3','4','5']:['0','5','10','15','20','30','40','50','60','80','100']).map(v=>`<button data-q="quantity" data-row="${row}" data-amount="${v}" aria-pressed="${String(i.amount)===v}">${esc(qAmount({amount:v,unit}))}</button>`).join('')}</div><div class="qExact"><label for="qExact${row}">ほかの量</label><input id="qExact${row}" data-q-exact="${row}" type="number" min="0" max="9999" step="0.01" inputmode="decimal" value="${i.amount??''}" aria-label="${esc(i.name)}の量"><button data-q="exact-done">この量にする</button></div><button class="linkButton full" data-q="unknown" data-row="${row}">量を入力せず続ける</button></div>`}
 function qOpenAmount(row){quickAmountRow=quickDirect?null:row;const html=qAmountMarkup(row);if($('#dialog').open&&$('#dialog').dataset.quickAmount){$('#dialogBody').innerHTML='<div id="dialogError" class="dialogError" role="alert"></div>'+html}else{openDialog(html);$('#dialog').dataset.quickAmount='yes'}}
-function qCloseAmount(){if($('#dialog').dataset.quickAmount){delete $('#dialog').dataset.quickAmount;closeDialog()}quickAmountRow=null;quickDirect=null}
+function qCloseAmount(){if($('#dialog').dataset.quickAmount){delete $('#dialog').dataset.quickAmount;closeDialog()}quickAmountRow=null;quickDirect=null;quickRecAdd=null}
 function quickRecovered(operation){if(operation.action==='quickLog'){quickAmountRow=null;render()}}
 function quickDock(){const d=qDraftView();if(!d.items.length)return '';return `<section class="dock qDock"><div class="qDraftSummary"><b>${esc(qSummary(d.items))}</b><small>未保存・${dateLabel(view.date)}・${slots[qSlot()]}ごはん${d.items.some(i=>i.amount==null)?' ／ 量未入力あり':''}</small><button class="linkButton" data-q="clear" data-edit>やめる</button></div><button class="primary" data-q="save" data-edit ${busy||pendingMutation?'disabled':''}>${d.replace?'この内容に訂正':qApplied(d.items)?'おかわりとして追加':qRecord()?'この食材・量を追加':'この食材・量で記録'}</button></section>`}
 function qSetItems(source,id){return source==='template'?state().templates.find(t=>t.id===id)?.items:state().records.find(r=>r.id===id)?.items}
@@ -328,11 +337,21 @@ async function qSave(items,options={}){const date=view.date,slot=qSlot(),key=qKe
 // ここで一緒に保存する未保存分はクイック下書きだけ。新規の記録の下書き（複数食材の組み立て途中）は従来どおり、量を入れて閉じるだけ。
 // 保存まで終わったら true（保存に失敗したら量の画面は閉じず false）。
 async function qAmountDecided(){const d=qDraft();if(!d.replace||!d.items.length)return false;const ok=await qSave(d.items,{...d,fromDraft:true,allowRepeat:false});if(ok)qCloseAmount();return ok}
-// 量を決めたときの保存先。訂正の下書きなら従来どおり下書きごと保存し（qAmountDecided）、記録済みの行の直接編集ならその食材だけを即保存する（qDirectDecided）。
-async function qAmountSettled(){if(quickDirect)return qDirectDecided();return qAmountDecided()}
+// 量を決めたときの保存先。訂正の下書きなら従来どおり下書きごと保存し（qAmountDecided）、記録済みの行の直接編集ならその食材だけを即保存し（qDirectDecided）、
+// 記録への食材の追加なら、その食材を記録に足して即保存する（qRecAddDecided・1.4.4 要望1）。
+async function qAmountSettled(){if(quickDirect)return qDirectDecided();if(quickRecAdd)return qRecAddDecided();return qAmountDecided()}
+// 1.4.4（要望1）: 記録済みの行の ＋ で選んだ食材を、決めた量で記録に足して即保存する。保存の直前に記録を読み直して控え（expectedRecord）にするため古さでは失敗しない。
+// ほかの食材・様子・メモは変えず、在庫も変えない（訂正と同じ扱い）。通知の「取り消す」で戻せる。
+async function qRecAddDecided(){const qa=quickRecAdd;if(!qa)return false;const r=state().records.find(x=>x.id===qa.recordId);
+ if(!r){quickRecAdd=null;showError('記録が見つかりませんでした。表示を新しくしました。');render();return false}
+ const items=qEditableItems(r.items&&r.items.length?r.items:r.foodIds.map(foodId=>({foodId,amount:null,unit:''})));
+ if(items.some(i=>i.name===qa.name)){quickRecAdd=null;showError('その食材は記録に入っています。表示を新しくしました。');render();return false}
+ items.push({name:qa.name,amount:qa.item.amount,unit:qa.item.amount==null?'':(qa.item.unit||qDefaultUnit())});
+ const ok=await mutate('quickLog',{date:qa.date,slot:qa.slot,items:qItems(items),replace:true,recordId:r.id,expectedRecord:JSON.parse(JSON.stringify(r))},qa.name+'を記録に足しました。在庫は変えていません。');
+ if(ok){quickRecAdd=null;qCloseAmount()}return ok}
 // 1.4.1（症状B）: 記録済みの食材の量だけを、その場で保存する。もとの記録は保存の直前に読み直して控え（expectedRecord）にするため、
 // 開いている間に記録が変わっていても古さで失敗しない。ほかの食材・様子・メモは変えず、在庫も変えない。
-// 記録済みの1食材だけの量を、その場で保存する共通処理（1.4.1 の直接編集と 1.4.2 の − ＋ で共用）。
+// 記録済みの1食材だけの量を、その場で保存する共通処理（1.4.1 の直接編集で使用）。
 // もとの記録は保存の直前に読み直した控え（expectedRecord）で送るため、古さでは失敗しない。ほかの食材・様子・メモ・在庫は変えない。
 async function qDirectSave(date,slot,r,name,amount,unit,message){const items=qEditableItems(r.items&&r.items.length?r.items:r.foodIds.map(foodId=>({foodId,amount:null,unit:''}))),it=items.find(i=>i.name===name);if(!it)return false;it.amount=amount;if(amount!=null)it.unit=unit||qDefaultUnit();return mutate('quickLog',{date,slot,items:qItems(items),replace:true,recordId:r.id,expectedRecord:JSON.parse(JSON.stringify(r))},message)}
 async function qDirectDecided(){const qd=quickDirect;if(!qd)return false;const r=state().records.find(x=>x.id===qd.recordId);
@@ -341,18 +360,49 @@ async function qDirectDecided(){const qd=quickDirect;if(!qd)return false;const r
  if(!it){quickDirect=null;showError('その食材は記録にありませんでした。表示を新しくしました。');render();return false}
  const ok=await qDirectSave(qd.date,qd.slot,r,qd.name,qd.item.amount,qd.item.unit,qd.name+'の量を直しました。在庫は変えていません。');
  if(ok){quickDirect=null;qCloseAmount()}return ok}
-// 1.4.2（要望2）: 記録済みの行の − ＋。押すたびにその食材の量だけを即保存する（在庫は変えない＝訂正と同じ扱い）。
-// 刻みは 小さじ＝1、g＝5、ml＝5。下限は1刻み分で 0 にはしない（食材自体の取り消しは「食材・量を訂正」側に残す）。
-// 量が未入力の行は、＋で「前回の量があればその量、無ければ小さじ1」を入れる（−は何もしないで伝える）。
-// その食事の訂正が途中のときは、下書きと競合するので止めて伝える（v1.4.1 の直接編集の保護と同じ）。
-async function tStepAmount(date,slot,name,dir){
- const p=meals(date).find(x=>x.slot===slot),r=p&&record(p),done=r&&tRecordedItem(r,name);if(!done){render();return false}
- const draft=quickDrafts.get(date+'|'+slot);
- if(draft?.replace&&draft.recordId===r.id){showError('この食事は訂正の途中です。下の「この内容に訂正」で保存するか、「やめる」を押してから量を変えてください。');return false}
- let amount=done.amount==null||done.amount===''?null:Number(done.amount),unit=done.unit||'';
- if(amount===null){if(dir<0){showStatus(name+'は量が入っていません。＋で量を入れられます。');return false}const d=qDefaults(name);amount=d.fromPrevious?Number(d.amount):1;unit=d.fromPrevious?d.unit:'小さじ'}
- else{const step=unit==='小さじ'?1:5,next=Math.round((amount+dir*step)*100)/100;if(next<step){showStatus(name+'の量はこれ以上減らせません。');return false}amount=next}
- return qDirectSave(date,slot,r,name,String(amount),unit,`${name}の量を${qAmount({amount:String(amount),unit})}にしました。在庫は変えていません。`);
+// 1.4.4（要望1）: 記録済みの行の − ＋（欄＝食材そのものの増減）。1.4.2 の量ステッパー（tStepAmount）は廃止した。
+// その食事の訂正が途中のときは、下書きと競合するので保存せず、訂正を終えるよう案内する（v1.4.1 の直接編集の保護と同じ）。
+function qRecordDraftBusy(date,slot,r){const draft=quickDrafts.get(date+'|'+slot);return Boolean(draft?.replace&&draft.recordId===r.id)}
+const qDraftBusyMessage='この食事は訂正の途中です。下の「この内容に訂正」で保存するか、「やめる」を押してから操作してください。';
+// − : その食材をその食事の記録から取り除いて即保存する（quickLog の上書き1回。通知の「取り消す」で戻せる。在庫は変えない＝訂正と同じ扱い）。
+// 最後の1食材のときは、その食事の記録自体を消す（removeRecord 1回・取り消し可）。ただし冷凍庫から取り出し済みの食事は、
+// 記録を消すと取り出した分が在庫に戻ってしまい「在庫は変えない」に反するため、消さずに既存の確認画面（記録を消しますか）へ案内する。
+async function tRowRemove(date,slot,name){
+ const p=meals(date).find(x=>x.slot===slot),r=p&&record(p);if(!r||!tRecordedItem(r,name)){render();return false}
+ if(qRecordDraftBusy(date,slot,r)){showError(qDraftBusyMessage);return false}
+ const items=qEditableItems(r.items&&r.items.length?r.items:r.foodIds.map(foodId=>({foodId,amount:null,unit:''}))).filter(i=>i.name!==name);
+ if(!items.length){
+  if(p.prepared){qRemoveRecordConfirm(r);return false}
+  view.recAddOpen=null;
+  return mutate('removeRecord',{id:p.id},name+'はこの食事の最後の食材だったので、'+slots[slot]+'の記録を消しました（未記録に戻しました）。在庫は変えていません。');
+ }
+ return mutate('quickLog',{date,slot,items:qItems(items),replace:true,recordId:r.id,expectedRecord:JSON.parse(JSON.stringify(r))},name+'を記録から外しました。在庫は変えていません。');
+}
+// ＋ で開く食材の選択。献立カードの「＋ 食材を足す」（tAddPicker）と同じ並び：ストック（残り個数つき・期限が近い順）を先に、続いて食材の一覧。
+// 記録にすでに入っている食材は出さない。在庫は見せるだけで、選んでも減らさない（訂正と同じ扱い）。
+function tRecAddPicker(d,slot){
+ if(view.recAddOpen!==d+'|'+slot)return '';
+ const p=meals(d).find(x=>x.slot===slot),r=p&&record(p);if(!r)return '';
+ const have=new Set((r.items?.length?r.items.map(qName):r.foodIds.map(id=>food(id)?.name)).filter(Boolean)),attrs=`data-date="${d}" data-slot="${slot}"`;
+ const stock=stockSorted(state().batches.filter(b=>b.quantity>0)).filter(b=>!qStockNames(b).every(n=>have.has(n))),inStock=new Set(stock.flatMap(qStockNames));
+ const hidden=new Set(state().foods.filter(f=>f.quickHidden).map(f=>f.name));
+ const master=[...new Set([...state().foods.map(f=>f.name),...Object.values(qFoodGroups).flat(),...Object.keys(qSuggestExtraRoles)])].filter(n=>!have.has(n)&&!inStock.has(n)&&!hidden.has(n));
+ return `<div class="tAddPick" data-rec-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}の記録に足す食材</b><button class="linkButton" data-t="row-add" ${attrs} aria-expanded="true">閉じる</button></div>${stock.length?`<p class="tAddHead">ストック</p><div class="tAddList">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="rec-pick" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}<p class="tAddHead">食材</p><div class="tAddList">${master.map(n=>`<button class="tAddItem" data-t="rec-pick" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`).join('')}</div></div>`;
+}
+// ＋ の選択先。食材が1つなら量の選択（前回量／目安／量なし＝qOneTap の初期値）を開き、決めたら即保存する（qRecAddDecided）。
+// ストックに食材が複数あるときは、1食材ずつ量の画面を出さず、前回量／目安（どちらも無ければ量なし）でまとめて足す。どちらも在庫は変えない。
+async function tRecPick(date,slot,batchId,name){
+ const p=meals(date).find(x=>x.slot===slot),r=p&&record(p);if(!r){view.recAddOpen=null;render();return false}
+ if(qRecordDraftBusy(date,slot,r)){showError(qDraftBusyMessage);return false}
+ const b=batchId?batch(batchId):null;if(batchId&&(!b||b.quantity<=0)){showError('このストックは残りがありません。表示を新しくしました。');view.recAddOpen=null;render();return false}
+ const names=b?qStockNames(b):[String(name||'').trim()].filter(Boolean);
+ const have=new Set((r.items?.length?r.items.map(qName):r.foodIds.map(id=>food(id)?.name)).filter(Boolean)),add=names.filter(n=>!have.has(n));
+ if(!add.length){showStatus('その食材は記録に入っています。');return false}
+ view.recAddOpen=null;
+ if(add.length===1){const t=qOneTap(add[0]);quickRecAdd={recordId:r.id,date,slot,name:add[0],item:{name:add[0],amount:t.amount,unit:t.unit||qDefaultUnit()}};quickAmountRow=null;render();qOpenAmount(-1);return true}
+ const items=qEditableItems(r.items&&r.items.length?r.items:r.foodIds.map(foodId=>({foodId,amount:null,unit:''})));
+ for(const n of add){const t=qOneTap(n);items.push({name:n,amount:t.amount,unit:t.amount==null?'':t.unit})}
+ return mutate('quickLog',{date,slot,items:qItems(items),replace:true,recordId:r.id,expectedRecord:JSON.parse(JSON.stringify(r))},add.join('・')+'を記録に足しました。在庫は変えていません。');
 }
 // 1.4.1（症状B）: 記録済みの食材の行から量の選択を開く（直接編集）。下書きは作らないので、訂正ドックは出ない。
 function qDirectOpen(date,slot,r,name){const rec=tRecordedItem(r,name);if(!rec)return false;quickDirect={recordId:r.id,date,slot,name,item:{name,amount:rec.amount,unit:rec.unit||qDefaultUnit()}};quickAmountRow=null;render();qOpenAmount(-1);return true}
@@ -400,11 +450,13 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='add-food'){if(slots[b.dataset.slot])await tAddFood(b.dataset.date,b.dataset.slot,b.dataset.batch||'',b.dataset.name||'');return}
  if(a==='remove-food'){if(slots[b.dataset.slot])await tRemoveFood(b.dataset.date,b.dataset.slot,b.dataset.name||'');return}
  // 古い表示（別の日付）のボタンでは記録しない。
- if((a==='ate'||a==='adjust'||a==='step')&&b.dataset.date!==view.date){showError('表示している日と違うため記録しませんでした。表示を更新しました。');render();return}
+ if((a==='ate'||a==='adjust'||a==='row-remove'||a==='row-add'||a==='rec-pick')&&b.dataset.date!==view.date){showError('表示している日と違うため記録しませんでした。表示を更新しました。');render();return}
  if(a==='ate')await tAte(b.dataset.date,b.dataset.slot,b.dataset.name);
  if(a==='adjust')tAdjust(b.dataset.date,b.dataset.slot,b.dataset.name);
- // 1.4.2（要望2）: 記録済みの行の − ＋（量だけを即保存）。
- if(a==='step')await tStepAmount(b.dataset.date,b.dataset.slot,b.dataset.name,Number(b.dataset.step));
+ // 1.4.4（要望1）: 記録済みの行の − ＋（欄＝食材そのものの増減）。− は記録から外し、＋ は食材の選択を開く。
+ if(a==='row-remove')await tRowRemove(b.dataset.date,b.dataset.slot,b.dataset.name);
+ if(a==='row-add'){if(slots[b.dataset.slot]){const k=b.dataset.date+'|'+b.dataset.slot;if(view.recAddOpen===k){view.recAddOpen=null;render()}else{const p=meals(b.dataset.date).find(x=>x.slot===b.dataset.slot),r=p&&record(p);if(r&&qRecordDraftBusy(b.dataset.date,b.dataset.slot,r))showError(qDraftBusyMessage);else{view.recAddOpen=k;render()}}}}
+ if(a==='rec-pick'){if(slots[b.dataset.slot])await tRecPick(b.dataset.date,b.dataset.slot,b.dataset.batch||'',b.dataset.name||'')}
 });
 document.addEventListener('click',async e=>{const b=e.target.closest('button[data-q]');if(!b||b.disabled)return;const a=b.dataset.q;if(!current)return;
  if(a==='input-jump'){$('#main').scrollTo(0,0);return}if(a==='week-record'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qWeekDetail(r);return}
@@ -426,7 +478,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='remove'){d.items.splice(row,1);quickAmountRow=null;render()}
  if(a==='clear'){quickDrafts.delete(qKey());quickAmountRow=null;render()}
  if(a==='save')await qSave(d.items,{...d,fromDraft:true,allowRepeat:!d.replace&&qApplied(d.items)});
- if(a==='exact-done'){const i=quickDirect?quickDirect.item:d.items[quickAmountRow];if(i.amount!=null&&(!/^\d{1,4}(?:\.\d{1,2})?$/.test(String(i.amount))||Number(i.amount)>9999)){showError('量をゼロ以上、小数二桁までで入力してください。');return}if(i.amount!=null)qRememberUnit(i.unit);if(!await qAmountSettled()){qCloseAmount();render()}}
+ if(a==='exact-done'){const i=qAmountItem(quickAmountRow);if(i.amount!=null&&(!/^\d{1,4}(?:\.\d{1,2})?$/.test(String(i.amount))||Number(i.amount)>9999)){showError('量をゼロ以上、小数二桁までで入力してください。');return}if(i.amount!=null)qRememberUnit(i.unit);if(!await qAmountSettled()){qCloseAmount();render()}}
  if(a==='log-set'){const items=qSetItems(b.dataset.source,b.dataset.id);if(items)await qSave(items)}
  if(a==='adjust-set'){const items=qSetItems(b.dataset.source,b.dataset.id);if(items)qFill(items)}
  if(a==='pin-draft'&&d.items.length)await qPin(d.items);
@@ -436,7 +488,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='edit-record'){const r=state().records.find(r=>r.id===b.dataset.id);const p=r&&state().plans.find(p=>p.id===r.planId);if(r&&p){if($('#dialog').open)closeDialog();view.page='today';view.todayMode='quick';view.todayFree=true;view.date=p.date;view.quickSlot=p.slot;qEditDraft(r);quickAmountRow=null;render();document.querySelector('.qBasket')?.scrollIntoView({block:'nearest'})}}
  if(a==='custom'){openDialog(`<h2>食材を自由に追加</h2><form id="quickCustomForm"><label class="field">食材名<input name="name" required maxlength="60" value="${esc(quickSearch)}" placeholder="市販品や家庭の呼び名でも"></label><p class="formHint">追加後、量はボタンで選べます。</p>${formActions('食材に追加')}</form>`)}
 });
-document.addEventListener('input',e=>{if(e.target.id==='quickSearch'){quickSearch=e.target.value;if(!e.isComposing&&!composingInputs.has(e.target))qRefreshSearch()}if(e.target.dataset.qExact!==undefined){const it=qAmountItem(Number(e.target.dataset.qExact));if(it){it.amount=e.target.value===''?null:e.target.value;it.fromPrevious=false;if(!it.unit)it.unit=qDefaultUnit()}if(!quickDirect)$('#actionbar').innerHTML=quickDock()}});
+document.addEventListener('input',e=>{if(e.target.id==='quickSearch'){quickSearch=e.target.value;if(!e.isComposing&&!composingInputs.has(e.target))qRefreshSearch()}if(e.target.dataset.qExact!==undefined){const it=qAmountItem(Number(e.target.dataset.qExact));if(it){it.amount=e.target.value===''?null:e.target.value;it.fromPrevious=false;if(!it.unit)it.unit=qDefaultUnit()}if(!quickDirect&&!quickRecAdd)$('#actionbar').innerHTML=quickDock()}});
 document.addEventListener('submit',e=>{if(e.target.id==='quickCustomForm'){e.preventDefault();if([...composingInputs].some(input=>e.target.contains(input)))return;const name=new FormData(e.target).get('name').trim();if(!name)return;if(name&&!qDraft().items.some(i=>i.name===name)){qDraft().items.push(qDefaults(name));quickAmountRow=qDraft().items.length-1}const row=quickAmountRow;draftFormSaved();closeDialog();quickSearch='';render();if(row!==null)qOpenAmount(row)}});
 
 function qRefreshSearch(){const results=$('#quickFoodResults');if(results){results.innerHTML=qFoodResultsMarkup();if(pendingMutation||!editable())results.querySelectorAll('[data-edit]').forEach(b=>b.disabled=true)}}
@@ -473,9 +525,10 @@ function qStartInfo(d=jstDate()){const set=qStartedOn(),stage=qStageKey();if(set
 // （つぶしがゆ1品から→慣れたら野菜→たんぱく質→2回食の頃から主食・主菜・副菜）をもとにした目安で、断定しない。日数も時期も分からなければ従来どおり3品まで。
 const qMealSteps=[[6,1,['主食']],[20,2,['主食','副菜']],[30,3,['主食','主菜','副菜']],[Infinity,3,['主食','主菜','副菜']]];
 // 1食の品数の手動設定（プロフィールの任意項目 itemsPerMeal、1.3.1）。設定があれば日数区分より優先する（区分の対応は qMealSteps と同じ）。
+// 1.4.4（要望2）: 手動の選択肢を 4・5品まで広げた。4・5品の区分は3品と同じ（主食・主菜・副菜）で、品数の不足分は提案側が同じ区分の2つ目で補う（qSuggest）。
 // 開始30日目までの主菜の食材制限（qEarly／qEarlyMainOk）は日数基準のままで、ここでは変えない。
-function qItemsPerMeal(){const v=state().child?.itemsPerMeal;return [1,2,3].includes(v)?v:0}
-function qMealLimit(info){const set=qItemsPerMeal();if(set)return {cap:set,roles:qMealSteps[set-1][2]};if(info.day===null)return {cap:3,roles:['主食','主菜','副菜']};const s=qMealSteps.find(s=>info.day<=s[0]);return {cap:s[1],roles:s[2]}}
+function qItemsPerMeal(){const v=state().child?.itemsPerMeal;return [1,2,3,4,5].includes(v)?v:0}
+function qMealLimit(info){const set=qItemsPerMeal();if(set)return {cap:set,roles:qMealSteps[Math.min(set,3)-1][2]};if(info.day===null)return {cap:3,roles:['主食','主菜','副菜']};const s=qMealSteps.find(s=>info.day<=s[0]);return {cap:s[1],roles:s[2]}}
 // 開始30日目まで（開始日数が分かるときだけ）は、食事を1日1回にし、主菜は初期向けの食材（豆腐・白身魚・卵黄・しらす）に限る。31日目からと日数不明のときは従来どおり。
 const qEarlyDays=30,qEarlyMains=['豆腐','白身魚','鯛','ひらめ','たら','かれい','卵黄','しらす'];
 function qEarly(info){return info.day!==null&&info.day<=qEarlyDays}
@@ -523,10 +576,12 @@ function qSuggest(today=jstDate()){
   for(const slot of qMealSlots(info)){
    if(planned.some(p=>p.slot===slot)){list.push({slot,taken:true,items:[],add:[]});continue}
    const items=[];
+   const canFor=r=>x=>{if(x.role!==r||x.left<=0||x.e.due<d)return false;if(r==='主菜'&&early&&!qEarlyMainOk(x))return false;const n=x.names.filter(isNew);return n.every(k=>fresh.has(k)||k===allow)&&new Set([...fresh,...n]).size<=1};
+   const unused=x=>!x.names.some(n=>dayUsed.has(n));
+   const pick=x=>{x.left--;const first=x.names.filter(isNew);first.forEach(n=>fresh.add(n));x.names.forEach(n=>dayUsed.add(n));items.push({batchId:x.b.id,name:x.b.name,role:x.role,names:x.names,first:first.length>0,due:x.e.due,baseNew:x.names.filter(n=>!seen(base,n,d)),guide:qSuggestGuide(x.names,stage),portion:String(x.b.portion||''),size:stockPortion(x.b)?stockPortionText(x.b):'',iron:qTagged(x.names,'iron'),vitaminC:qTagged(x.names,'vitaminC')})};
    for(const [role] of qSuggestRoles){
     if(!limit.roles.includes(role))continue;
-    const canFor=r=>x=>{if(x.role!==r||x.left<=0||x.e.due<d)return false;if(r==='主菜'&&early&&!qEarlyMainOk(x))return false;const n=x.names.filter(isNew);return n.every(k=>fresh.has(k)||k===allow)&&new Set([...fresh,...n]).size<=1};
-    const can=canFor(role),unused=x=>!x.names.some(n=>dayUsed.has(n));
+    const can=canFor(role);
     let pref=null;
     if(!dayPaired&&limit.roles.includes('主菜')&&limit.roles.includes('副菜')){
      if(role==='主菜'&&!items.some(i=>i.iron)&&usable.some(y=>canFor('副菜')(y)&&qTagged(y.names,'vitaminC')))pref=x=>qTagged(x.names,'iron');
@@ -534,8 +589,28 @@ function qSuggest(today=jstDate()){
     }
     const x=(pref&&(usable.find(x=>can(x)&&pref(x)&&unused(x))||usable.find(x=>can(x)&&pref(x))))||usable.find(x=>can(x)&&unused(x))||usable.find(can);
     if(!x)continue;
-    x.left--;const first=x.names.filter(isNew);first.forEach(n=>fresh.add(n));x.names.forEach(n=>dayUsed.add(n));
-    items.push({batchId:x.b.id,name:x.b.name,role,names:x.names,first:first.length>0,due:x.e.due,baseNew:x.names.filter(n=>!seen(base,n,d)),guide:qSuggestGuide(x.names,stage),portion:String(x.b.portion||''),size:stockPortion(x.b)?stockPortionText(x.b):'',iron:qTagged(x.names,'iron'),vitaminC:qTagged(x.names,'vitaminC')});
+    pick(x);
+   }
+   // 1.4.4（要望2）: 品数を手動で選んでいて、区分ごとに1つずつでは目標品数に届かないときは、副菜→主菜→主食の順に同じ区分の2つ目以降を足す（同じ順を繰り返し、最大で目標品数まで）。
+   // 同じ食材は1食に重ねない。期限の近い順・在庫の押さえ（left）・はじめて1日1種類・開始30日目までの主菜制限・鉄＋ビタミンCの優先は、1つ目と同じ判定（canFor）で効かせる。
+   // 「自動」のときは従来どおり区分ごとに1つずつ（日数の目安で最大3品）。ストックの種類が足りなければ、出せる分だけ出す。
+   if(qItemsPerMeal()){
+    let added=true;
+    while(items.length<limit.cap&&added){
+     added=false;
+     for(const role of ['副菜','主菜','主食']){
+      if(items.length>=limit.cap)break;
+      if(!limit.roles.includes(role))continue;
+      const can=canFor(role),inMeal=x=>x.names.some(n=>items.some(i=>i.names.includes(n)));
+      let pref=null;
+      if(!dayPaired&&limit.roles.includes('主菜')&&limit.roles.includes('副菜')){
+       if(role==='主菜'&&!items.some(i=>i.iron)&&usable.some(y=>canFor('副菜')(y)&&qTagged(y.names,'vitaminC')))pref=x=>qTagged(x.names,'iron');
+       if(role==='副菜'&&items.some(i=>i.iron)&&!items.some(i=>i.vitaminC))pref=x=>qTagged(x.names,'vitaminC');
+      }
+      const x=(pref&&(usable.find(x=>can(x)&&pref(x)&&!inMeal(x)&&unused(x))||usable.find(x=>can(x)&&pref(x)&&!inMeal(x))))||usable.find(x=>can(x)&&!inMeal(x)&&unused(x))||usable.find(x=>can(x)&&!inMeal(x));
+      if(x){pick(x);added=true}
+     }
+    }
    }
    // 鉄の品とビタミンCの品（別の品）がそろった食事には、理由を小さく添える。
    const ironItem=items.find(i=>i.iron),cItem=items.find(i=>i!==ironItem&&i.vitaminC),pair=ironItem&&cItem?{iron:ironItem.iron,vitaminC:cItem.vitaminC}:null;
@@ -610,7 +685,9 @@ function qSuggestFactsMarkup(s,near=false){
  const later=s.days.find(d=>d.cap!==s.limit.cap),change=near?'':(later?`${esc(dateLabel(later.date))}からは1回${later.cap}品まで`:'');
  const guide=!i.start&&!qOldestRecordDay()?`<p class="small muted qSuggestStart">設定で「離乳食を始めた日」を入れると、日数に合わせた品数・回数で組み立てます。<button class="linkButton" data-action="profile" data-edit>設定する</button></p>`:'';
  let step;
- if(i.source==='period')step=qSuggestFact('品数：',`今の時期（${esc(i.stage)}）→ ${what}`);
+ // 1.4.4（要望2）: 品数を手動で選んでいるときは、その品数が根拠（日数・時期の行より先に出す）。ストックの種類が足りず目標に届かない日があるときは、その旨も添える。
+ if(qItemsPerMeal())step=qSuggestFact('品数：',`1回${qItemsPerMeal()}品まで（設定した品数）`,[s.days.some(d=>d.meals.some(m=>!m.taken&&m.items.length<d.cap))?'ストックの種類が足りない日は、出せる分だけにしています':'']);
+ else if(i.source==='period')step=qSuggestFact('品数：',`今の時期（${esc(i.stage)}）→ ${what}`);
  else if(i.source==='')step=qSuggestFact('品数：','始めた日が分からない → 1回3品まで（目安）');
  else if(i.day===0)step=qSuggestFact('品数：',`始める日（${esc(dateLabel(i.start))}）より前 → ${what}`,[change]);
  else step=qSuggestFact('品数：',`開始${i.day}日目（${esc(dateLabel(s.from))}）→ ${what}`,[change,i.source==='record'?'始めた日は、一番古い食事の記録の日から数えています':'']);
