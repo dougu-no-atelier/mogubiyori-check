@@ -78,7 +78,12 @@ function tWeekToggle(){const on=qWeekSuggestOn();return `<div class="tMealCount 
 // カードの上で足す・外せる献立か。記録済み・準備済みは従来の編集（食材・量を訂正／献立を編集）だけにする（記録と取り出し済みの在庫を守るため）。
 function tInlineEditable(p){return !p||(!record(p)&&!p.prepared)}
 function tAddOpenKey(d,slot){return d+'|'+slot}
-function tAddButton(d,slot){const open=view.addOpen===tAddOpenKey(d,slot);return `<button class="tAddOpen" data-t="add-open" data-date="${d}" data-slot="${slot}" aria-expanded="${open}" data-edit>＋ 食材を足す</button>`}
+function tAddButton(d,slot,label){const open=view.addOpen===tAddOpenKey(d,slot);return `<button class="tAddOpen" data-t="add-open" data-date="${d}" data-slot="${slot}" aria-expanded="${open}" data-edit>${label||'＋ 食材を足す'}</button>`}
+// 1.4.6: 食材もストック使用も無い献立（カードの × で全部外した跡など）は、データは残したまま「空の枠」として扱う。
+// 空の枠ではおすすめのプレビューが戻り、タップで入れ直せる（廃止した「おすすめに変える」の代わり）。記録済み・準備済みは対象外。
+function tIsHusk(p){return Boolean(p)&&!record(p)&&!p.prepared&&!p.uses.length&&qPlanNames(p).length===0}
+// 空の枠のおすすめは、プレビュー自体がボタン（タップ＝入れる）。「入れる」ボタンは別に置かない（1.4.6・最短経路に一本化）。
+function tPreviewButton(m,d,slot,src,cls){return `<button class="${cls||'tPreviewBtn'}" data-action="suggestMeal" data-date="${d}" data-slot="${slot}"${src?` data-src="${src}"`:''} aria-label="${esc(slots[slot])}におすすめの献立を入れる" data-edit>${tPreviewMarkup(m)}<span class="tPreviewPlus" aria-hidden="true">＋</span></button>`}
 function tRemoveButton(d,slot,name){return `<button class="tRemove" data-t="remove-food" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を外す" data-edit>×</button>`}
 // 「＋ 食材を足す」で開く候補。ストック（残り個数つき・期限が近い順）を先に、次に食材の一覧（登録済みの食材→量の目安の分類表の食材）。入っている食材は出さない。
 function tAddPicker(d,slot){
@@ -97,7 +102,7 @@ function tAddPicker(d,slot){
 async function qLinkedReplan(date,slot){const p=meals(date).find(x=>x.slot===slot);await qAutoApplySuggest({why:'編集',rebuildOnly:true,excludeId:p?p.id:null})}
 // 足す・外すの保存。通常の献立保存（plan）1回なので、通知の「取り消す」で戻る。在庫は変えない。
 // 題名が食材の列挙（提案から入れた献立・自動作成など）なら新しい食材で付け直し、手で付けた題名はそのまま。おすすめ由来の献立は「直した献立」の印に変える（自動の入れ直しの対象から外れる）。
-function tPlanEdit(p,names){const was=p?qPlanNames(p):[],listTitle=!p||p.note===qSuggestNote||p.title===was.join('・')||p.title===p.uses.map(u=>batch(u.batchId)?.name).join('・');return {title:(listTitle?names.join('・'):p.title).slice(0,100),note:p?(p.note===qSuggestNote?qEditedNote:p.note):''}}
+function tPlanEdit(p,names){const was=p?qPlanNames(p):[],listTitle=!p||!was.length||p.note===qSuggestNote||p.title===was.join('・')||p.title===p.uses.map(u=>batch(u.batchId)?.name).join('・');return {title:(listTitle?names.join('・'):p.title).slice(0,100),note:p?(p.note===qSuggestNote?qEditedNote:p.note):''}}
 async function tAddFood(date,slot,batchId,name){
  const p=meals(date).find(x=>x.slot===slot);
  if(!tInlineEditable(p)){showError('記録済み・準備済みの食事は、カードの下のボタンから直してください。表示を新しくしました。');render();return false}
@@ -117,10 +122,11 @@ async function tRemoveFood(date,slot,name){
  const p=meals(date).find(x=>x.slot===slot);
  if(!p||!tInlineEditable(p)){showError('記録済み・準備済みの食事は、カードの下のボタンから直してください。表示を新しくしました。');render();return false}
  const was=qPlanNames(p);if(!was.includes(name)){render();return false}
- if(was.length<=1){showStatus('最後の1品は外せません。「おすすめに変える」か「＋ 食材を足す」で入れ替えてください。');return false}
  // 外す食材を含むストックの使用もいっしょに外す（残すと献立の保存でその食材が戻るため）。
- const names=was.filter(n=>n!==name),uses=p.uses.filter(u=>{const b=batch(u.batchId);return !(b&&qStockNames(b).includes(name))}).map(u=>({batchId:u.batchId,quantity:u.quantity}));
- const t=tPlanEdit(p,names);
+ // 1.4.6: 最後の1品も外せる（「おすすめに変える」は廃止）。全部外れると枠は空になり（tIsHusk）、おすすめのプレビューが戻る。
+ // 空になるときはストック使用も全部外し、題名は保存の必須条件のため今の題名を残す（表示は空の枠として扱うので出ない）。
+ const names=was.filter(n=>n!==name),uses=names.length?p.uses.filter(u=>{const b=batch(u.batchId);return !(b&&qStockNames(b).includes(name))}).map(u=>({batchId:u.batchId,quantity:u.quantity})):[];
+ const t=tPlanEdit(p,names);if(!names.length)t.title=p.title;
  const ok=await mutate('plan',{id:p.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${name}を外しました。在庫は変えていません。`);
  if(ok)await qLinkedReplan(date,slot);
  return ok;
@@ -158,24 +164,25 @@ function tMealNames(p,r){
 function tRowBtnsMarkup(d,slot,name){return `<span class="tStep"><button data-t="row-remove" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を記録から外す" data-edit>−</button><button data-t="row-add" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="この食事に食材を足す" data-edit>＋</button></span>`}
 function tRowMarkup(d,slot,name,r,removable=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name),sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
 function tMealMarkup(d,slot,day){
- const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),m=!p&&day?day.meals.find(x=>x.slot===slot):null,inline=tInlineEditable(p);
+ const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p);
  // 題名が食材名の列挙そのもの（提案から入れた献立など）なら、カード内の食材名と重複するので見出しには出さない。食材未登録のときは本文側で題名を出す。
  const headTitle=p&&!p.quickCreated&&names.length&&p.title&&p.title!==qPlanNames(p).join('・')?`<span class="tMealTitle">${esc(p.title)}</span>`:'',pill=r?`<span class="pill ${planRecordChanged(p,r)?'':'green'}">${esc(status(p))}</span>`:'';
  let body;
  // 1.3.0: 食材ごとの「×」（外す）。足す・外すができるのは未記録・未準備の献立だけ。
  if(p&&names.length)body=names.map(n=>tRowMarkup(d,slot,n,r,inline)).join('');
- else if(p)body=`<div class="tRow ${r?'done':''}"><span class="tRowMain"><b>${esc(p.title)}</b><small>${r?esc(r.result):'食材は未登録'}</small></span>${r?'<span class="tDone">記録済み</span>':`<button class="tAte" data-action="quickRecord" data-id="${p.id}" data-result="食べた" aria-label="${esc(p.title)}を食べたで記録" data-edit>食べた</button>`}</div>`;
- // 1.3.0: 空の枠のおすすめは、一週間と同じプレビュー（薄い表示＋「入れる」）。
- else if(m&&!m.taken&&m.add.length)body=`<div class="tEmpty tEmptySuggest">${tPreviewMarkup(m)}<button class="tPreviewAdd" data-action="suggestMeal" data-date="${d}" data-slot="${slot}" aria-label="${esc(slots[slot])}におすすめの献立を入れる" data-edit>入れる</button></div>`;
- else body=`<div class="tEmpty"><small>${d>=jstDate()?'ストックが足りません':'献立はまだありません。'}</small></div>`;
- const rep=p&&!r&&!p.prepared&&!planStockConflict(p).length?tReplaceMeal(d,slot,p.id):null;
- // 1.3.0: 操作は1列にまとめる（足す → おすすめに変える → 冷凍庫から出す → 様子・メモ → 編集フォーム）。
- // 1.4.0: 「自分で選んで記録」はカードから外し、今日の開いた中にある小さなリンク「メニューにないものを記録」に一本化した。
- const foot=[inline?tAddButton(d,slot):'',rep?`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`:'',p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'',r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
+ else if(p&&!husk)body=`<div class="tRow ${r?'done':''}"><span class="tRowMain"><b>${esc(p.title)}</b><small>${r?esc(r.result):'食材は未登録'}</small></span>${r?'<span class="tDone">記録済み</span>':`<button class="tAte" data-action="quickRecord" data-id="${p.id}" data-result="食べた" aria-label="${esc(p.title)}を食べたで記録" data-edit>食べた</button>`}</div>`;
+ // 1.4.6: 空の枠（献立なし・全部外した跡）におすすめがあれば、プレビュー自体をタップして入れる。「入れる」ボタンは置かない。
+ else{const m=husk?tReplaceMeal(d,slot,p.id):(day?day.meals.find(x=>x.slot===slot):null);body=m&&!m.taken&&m.add.length?`<div class="tEmpty">${tPreviewButton(m,d,slot)}</div>`:''}
+ // 1.4.6: 操作の整理。献立がある枠は「＋ 食材を足す」＋（ストック使用があれば）「冷凍庫から出す」＋編集フォームの入口だけ。
+ // 「おすすめに変える」は廃止（全部外すとプレビューが戻る）。空の枠は「自分で食材を選ぶ」だけ（「献立を追加」は廃止し、これに一本化）。
+ // 記録済みの操作（様子・メモ／食材・量を訂正／行の − ＋）は従来どおり。
+ const prepare=p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'';
+ const foot=(husk||!p)?tAddButton(d,slot,'自分で食材を選ぶ'):[inline?tAddButton(d,slot):'',prepare,r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
  return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}${r?tRecAddPicker(d,slot):''}</article>`;
 }
-// 編集フォーム（tEditMeal）への入口。1.3.0 から足す・外すはカードの上でできるので、副操作の小さなリンクにした（記録済み→食材・量を訂正、献立あり→献立を編集、空き→献立を追加）。
-function tEditMealButton(d,slot){const p=meals(d).find(x=>x.slot===slot),label=p?(record(p)?'食材・量を訂正':'献立を編集'):'献立を追加';return `<button class="linkButton tEditMeal" data-t="edit-meal" data-date="${d}" data-slot="${slot}" aria-label="${esc(slots[slot])}の${label}" data-edit>${label}</button>`}
+// 編集フォーム（tEditMeal）への入口。1.3.0 から足す・外すはカードの上でできるので、副操作の小さなリンクにした（記録済み→食材・量を訂正、献立あり→献立を編集）。
+// 1.4.6: 空き枠の「献立を追加」は廃止した（「自分で食材を選ぶ」に一本化）ので、献立が無い枠ではこの入口自体を出さない。
+function tEditMealButton(d,slot){const p=meals(d).find(x=>x.slot===slot);if(!p)return '';const label=record(p)?'食材・量を訂正':'献立を編集';return `<button class="linkButton tEditMeal" data-t="edit-meal" data-date="${d}" data-slot="${slot}" aria-label="${esc(slots[slot])}の${label}" data-edit>${label}</button>`}
 // 「食材を足す／変える」。記録済みならその記録の訂正（食材を選んで記録の訂正モード）、献立があれば献立の編集、無ければその日・その食事の献立の追加を開く。
 // 品数が日数の目安（qMealLimit）に達していたら、開く前に短く伝える（開くのは止めない）。
 function tEditMeal(date,slot){
@@ -218,7 +225,8 @@ function qStartNowLine(d=jstDate()){
  else t='いまの計算：始めた日も食事の記録もまだ無いため、日数では数えていません';
  return `<p class="small muted qStartNow">${esc(t)}</p>`;
 }
-// 「おすすめに変える」用：対象の献立が無いものとして計算した、その日のその食事の提案。エンジン（qSuggest）の組み立ては変えず、同期計算の間だけ献立を外して戻す（画面には出ない）。記録済み・準備済みの食事には使わない。
+// 対象の献立が無いものとして計算した、その日のその食事の提案。エンジン（qSuggest）の組み立ては変えず、同期計算の間だけ献立を外して戻す（画面には出ない）。
+// 1.4.6 からは、食材を全部外した跡（tIsHusk）の枠にプレビューを戻すために使う（旧「おすすめに変える」用）。記録済み・準備済みの食事には使わない。
 function tReplaceMeal(d,slot,planId){const plans=state().plans,i=plans.findIndex(p=>p.id===planId);if(i<0)return null;const removed=plans[i];plans.splice(i,1);try{return tSuggestFor(d)?.meals.find(m=>m.slot===slot&&!m.taken&&m.add.length)||null}finally{plans.splice(i,0,removed)}}
 // 1.4.0: 旧 todayMealsBlock（今日のメニュー）と旧 todayUpcomingBlock（これからのメニュー）は todayMenuBlock（下）に統合した。
 // メニューの明日〜6日後（1.2.0 の「これからのメニュー」を 1.4.0 で「メニュー」に統合）。日ごとに、日付と各食事の食材名だけ。献立があればその食材、無ければ使い切り提案（qSuggest、明日から）のプレビュー。
@@ -226,13 +234,14 @@ function tReplaceMeal(d,slot,planId){const plans=state().plans,i=plans.findIndex
 // 1.2.1: 日付を押すとその日がその場で開き（view.upOpen）、食事ごとに「おすすめに変える／おすすめを入れる」「食材を足す／変える」が押せる（開く→押すだけ）。
 // 使う食事の外の枠の献立は、1.4.2（要望3）から今日画面には出さない（データは残し、使う食事に戻せば通常どおり出る）。
 // 1.3.0: 開いた日の各食事にも、カードと同じ「×」（外す）・「＋ 食材を足す」・「おすすめに変える」（空きはプレビュー＋「入れる」）を出す。
+// 1.4.6: 操作を整理（「おすすめに変える」「入れる」「献立を追加」を廃止）。空き枠のおすすめはプレビュー自体のタップで入れ（閉じた行からでも1タップ）、
+// 自分の食材は「自分で食材を選ぶ」から。献立がある枠は「×」・「＋ 食材を足す」・編集フォームの入口だけ。
 // 1.4.0: 日の欄全体がタップ対象（見出しに「直す」は付けない）。「この日のおすすめを入れる」（suggestPlan）も開いた中に出し、欄の外には「直す」系のボタンを置かない。
 function tUpActions(d,slot,p,m){
- let rec='';
- if(p){if(!record(p)&&!p.prepared&&!planStockConflict(p).length&&tReplaceMeal(d,slot,p.id))rec=`<button class="linkButton" data-action="suggestReplace" data-date="${d}" data-slot="${slot}" data-id="${p.id}" data-edit>おすすめに変える</button>`}
- else if(m&&!m.taken&&m.add.length)rec=`<button class="tPreviewAdd" data-action="suggestMeal" data-date="${d}" data-slot="${slot}" data-src="up" aria-label="${esc(dateLabel(d))}の${esc(slots[slot])}におすすめの献立を入れる" data-edit>入れる</button>`;
- const add=tInlineEditable(p)?tAddButton(d,slot):'';
- return `<span class="tUpActions">${p?add+rec:rec+add}${tEditMealButton(d,slot)}</span>`;
+ // 1.4.6: 「おすすめに変える」と空き枠の「献立を追加」は廃止。空き枠（献立なし・全部外した跡）は「自分で食材を選ぶ」だけ
+ // （おすすめの採用はプレビュー自体のタップに一本化）。献立がある枠は「＋ 食材を足す」＋編集フォームの入口だけ。
+ if(!p||tIsHusk(p))return `<span class="tUpActions">${tAddButton(d,slot,'自分で食材を選ぶ')}</span>`;
+ return `<span class="tUpActions">${tInlineEditable(p)?tAddButton(d,slot):''}${tEditMealButton(d,slot)}</span>`;
 }
 // 1.3.0: on=一週間のおすすめを出す（weekSuggest）。出さないときは提案（s）を使わず、実際の献立だけを出す（空の日は「献立なし」だけ）。
 function tUpcomingDay(d,s,on=true){
@@ -241,8 +250,10 @@ function tUpcomingDay(d,s,on=true){
   const p=ps.find(x=>x.slot===slot),m=p?null:day?.meals.find(x=>x.slot===slot),act=()=>open?tUpActions(d,slot,p,m)+(tInlineEditable(p)?tAddPicker(d,slot):''):'';
   // 1.4.5（要望A）: 閉じた状態では、食材名の並び自体をボタンにして、行をタップしてもその日が開くようにする（従来は日付の見出しだけがタップ対象で、行を押しても何も起きなかった）。
   const namesBox=inner=>open?`<span class="tUpNames">${inner}</span>`:`<button class="tUpNames tUpOpenBtn" data-t="up-open" data-date="${d}" aria-label="${esc(dateLabel(d))}の${slots[slot]}を開く">${inner}</button>`;
-  if(p){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox((tFromSuggest(p)?tSuggestMark:'')+shown)}${act()}</li>`}
-  if(m&&!m.taken&&m.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span>${namesBox(tPreviewMarkup(m))}${act()}</li>`;
+  if(p&&!tIsHusk(p)){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox((tFromSuggest(p)?tSuggestMark:'')+shown)}${act()}</li>`}
+  // 1.4.6: 空き枠のおすすめは、閉じた行でも開いた行でもプレビュー自体がボタン（タップ＝入れる）。日を開かずに1タップで入る。
+  const m2=p?tReplaceMeal(d,slot,p.id):m;
+  if(m2&&!m2.taken&&m2.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span>${tPreviewButton(m2,d,slot,'up','tUpNames tUpSuggestBtn')}${act()}</li>`;
   if(on&&(!m||!m.items.length))short=true;return open?`<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>${on?'まだありません':'献立なし'}</small></span>${act()}</li>`:'';
  }).join(''); // 1.4.2（要望3）: 使う食事の外の献立の1行（「（使う食事に入っていません）」）は今日画面に出さない（データは消さない）
  // 1.4.1（全体監査）: 「献立なし」は、その日に献立が1つも無いときだけ。使う食事の外の献立だけがある日は、外の1行が出るので同時に出さない。

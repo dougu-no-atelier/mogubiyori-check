@@ -309,8 +309,10 @@ span.tRowMain{border-style:dashed}
 .tUpNames .tSuggestMark{margin-right:6px}
 .tPreview{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;flex:1;min-width:0;color:var(--muted);overflow-wrap:anywhere}
 .tPreviewNames{min-width:0}
-.tEmpty.tEmptySuggest{padding:8px 8px 8px 12px;border:1px dashed var(--line);border-radius:14px;background:#fffaf2}
-.tPreviewAdd,.tUpAdd{flex:none;min-height:44px;min-width:76px;padding:6px 16px;border-radius:999px;background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+.tPreviewBtn{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 8px 8px 12px;border:1px dashed var(--line);border-radius:14px;background:#fffaf2;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.tPreviewPlus{margin-left:auto;flex:none;color:var(--green);font-weight:700;font-size:20px;line-height:1}
+.tUpSuggestBtn{display:flex;align-items:center;gap:8px;flex:1;min-width:0;background:transparent;border:0;margin:0;padding:2px 0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.tUpAdd{flex:none;min-height:44px;min-width:76px;padding:6px 16px;border-radius:999px;background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
 .tMealFoot{display:flex;flex-wrap:wrap;align-items:center;gap:2px 14px;margin-top:6px}
 .tAddOpen{flex:none;min-height:40px;padding:4px 14px;border-radius:999px;border:1px dashed #c9b9a6;background:transparent;font-size:14px;font-weight:600;color:var(--ink)}
 .tAddOpen[aria-expanded="true"]{border-style:solid;background:#fffaf2}
