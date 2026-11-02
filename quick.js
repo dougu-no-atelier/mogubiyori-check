@@ -89,6 +89,12 @@ function tAddPicker(d,slot){
  const master=[...new Set([...state().foods.map(f=>f.name),...Object.values(qFoodGroups).flat(),...Object.keys(qSuggestExtraRoles)])].filter(n=>!have.has(n)&&!inStock.has(n)&&!hidden.has(n));
  return `<div class="tAddPick" data-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}に足す食材</b><button class="linkButton" data-t="add-open" ${attrs} aria-expanded="true">閉じる</button></div>${stock.length?`<p class="tAddHead">ストック</p><div class="tAddList">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="add-food" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}<p class="tAddHead">食材</p><div class="tAddList">${master.map(n=>`<button class="tAddItem" data-t="add-food" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`).join('')}</div></div>`;
 }
+// 1.4.5（要望B）: 献立を手で編集（食材の追加・削除）したら、その保存に続けて、窓（今日〜+6日）の手つかずのおすすめ献立を
+// 現在のストック残量・押さえで組み直す。編集でストックの押さえが変わると、ほかの日のおすすめも変わりうるため（「臨機応変に変化」）。
+// 組み直し自体は既存の仕組み（qAutoApplySuggest・rebuildOnly）で、保存は planMany の1回にまとまり、通知もその1回だけ。
+// 編集した本人（その食事）は excludeId で対象から外す。記録済み・取り出し済み・直した献立は従来どおり対象外。
+// 設定変更・ストック追加・起動時の組み直しとは別トリガーだが、走る中身は同じ関数なので二重に保存が増えることはない（変わる分だけ・1回）。
+async function qLinkedReplan(date,slot){const p=meals(date).find(x=>x.slot===slot);await qAutoApplySuggest({why:'編集',rebuildOnly:true,excludeId:p?p.id:null})}
 // 足す・外すの保存。通常の献立保存（plan）1回なので、通知の「取り消す」で戻る。在庫は変えない。
 // 題名が食材の列挙（提案から入れた献立・自動作成など）なら新しい食材で付け直し、手で付けた題名はそのまま。おすすめ由来の献立は「直した献立」の印に変える（自動の入れ直しの対象から外れる）。
 function tPlanEdit(p,names){const was=p?qPlanNames(p):[],listTitle=!p||p.note===qSuggestNote||p.title===was.join('・')||p.title===p.uses.map(u=>batch(u.batchId)?.name).join('・');return {title:(listTitle?names.join('・'):p.title).slice(0,100),note:p?(p.note===qSuggestNote?qEditedNote:p.note):''}}
@@ -103,7 +109,9 @@ async function tAddFood(date,slot,batchId,name){
  const names=[...new Set([...was,...add])];if(names.length===was.length){showStatus(add.join('・')+'は入っています。');return false}
  const uses=p?p.uses.map(u=>({batchId:u.batchId,quantity:u.quantity})):[];if(b&&!uses.some(u=>u.batchId===b.id))uses.push({batchId:b.id,quantity:1});
  const t=tPlanEdit(p,names);
- return mutate('plan',{id:p?.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${dateLabel(date)}の${slots[slot]}に${add.join('・')}を足しました。在庫は変えていません。`);
+ const ok=await mutate('plan',{id:p?.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${dateLabel(date)}の${slots[slot]}に${add.join('・')}を足しました。在庫は変えていません。`);
+ if(ok)await qLinkedReplan(date,slot);
+ return ok;
 }
 async function tRemoveFood(date,slot,name){
  const p=meals(date).find(x=>x.slot===slot);
@@ -113,7 +121,9 @@ async function tRemoveFood(date,slot,name){
  // 外す食材を含むストックの使用もいっしょに外す（残すと献立の保存でその食材が戻るため）。
  const names=was.filter(n=>n!==name),uses=p.uses.filter(u=>{const b=batch(u.batchId);return !(b&&qStockNames(b).includes(name))}).map(u=>({batchId:u.batchId,quantity:u.quantity}));
  const t=tPlanEdit(p,names);
- return mutate('plan',{id:p.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${name}を外しました。在庫は変えていません。`);
+ const ok=await mutate('plan',{id:p.id,date,slot,title:t.title,note:t.note,foods:names,uses},`${name}を外しました。在庫は変えていません。`);
+ if(ok)await qLinkedReplan(date,slot);
+ return ok;
 }
 // 初回案内。冷凍庫に残りのあるストックが無く、表示中の日に献立・記録も無いとき（使い切った後もここに戻る）。
 function tNeedsStock(d){return !state().batches.some(b=>b.quantity>0)&&!meals(d).length}
@@ -229,8 +239,10 @@ function tUpcomingDay(d,s,on=true){
  const day=on?s?.days.find(x=>x.date===d):null,ps=meals(d),open=view.upOpen===d;let short=false;
  const rows=tSlots(d).map(slot=>{
   const p=ps.find(x=>x.slot===slot),m=p?null:day?.meals.find(x=>x.slot===slot),act=()=>open?tUpActions(d,slot,p,m)+(tInlineEditable(p)?tAddPicker(d,slot):''):'';
-  if(p){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames">${tFromSuggest(p)?tSuggestMark:''}${shown}</span>${act()}</li>`}
-  if(m&&!m.taken&&m.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames">${tPreviewMarkup(m)}</span>${act()}</li>`;
+  // 1.4.5（要望A）: 閉じた状態では、食材名の並び自体をボタンにして、行をタップしてもその日が開くようにする（従来は日付の見出しだけがタップ対象で、行を押しても何も起きなかった）。
+  const namesBox=inner=>open?`<span class="tUpNames">${inner}</span>`:`<button class="tUpNames tUpOpenBtn" data-t="up-open" data-date="${d}" aria-label="${esc(dateLabel(d))}の${slots[slot]}を開く">${inner}</button>`;
+  if(p){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox((tFromSuggest(p)?tSuggestMark:'')+shown)}${act()}</li>`}
+  if(m&&!m.taken&&m.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span>${namesBox(tPreviewMarkup(m))}${act()}</li>`;
   if(on&&(!m||!m.items.length))short=true;return open?`<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>${on?'まだありません':'献立なし'}</small></span>${act()}</li>`:'';
  }).join(''); // 1.4.2（要望3）: 使う食事の外の献立の1行（「（使う食事に入っていません）」）は今日画面に出さない（データは消さない）
  // 1.4.1（全体監査）: 「献立なし」は、その日に献立が1つも無いときだけ。使う食事の外の献立だけがある日は、外の1行が出るので同時に出さない。
@@ -576,7 +588,11 @@ function qSuggest(today=jstDate()){
   for(const slot of qMealSlots(info)){
    if(planned.some(p=>p.slot===slot)){list.push({slot,taken:true,items:[],add:[]});continue}
    const items=[];
-   const canFor=r=>x=>{if(x.role!==r||x.left<=0||x.e.due<d)return false;if(r==='主菜'&&early&&!qEarlyMainOk(x))return false;const n=x.names.filter(isNew);return n.every(k=>fresh.has(k)||k===allow)&&new Set([...fresh,...n]).size<=1};
+   // 1.4.5（症状）: 候補が増やす「はじめての食材」が、その日の献立・記録に既にある分（fresh）と、その日に許された1種類（allow）の範囲内なら通す。
+   // 以前は「その日の新しい食材の合計が1種類まで」という合計条件（size<=1）も課していたため、既存の献立に新しい食材が2種類ある日は、
+   // 新しい食材を含まない候補（食べたことのある食材）まで全て弾かれ、その日の提案が0品になって「ストックが足りません」と誤表示された。
+   // 提案が新しい食材を「増やさない」こと自体は、上の every の条件で従来どおり守られる。
+   const canFor=r=>x=>{if(x.role!==r||x.left<=0||x.e.due<d)return false;if(r==='主菜'&&early&&!qEarlyMainOk(x))return false;const n=x.names.filter(isNew);return n.every(k=>fresh.has(k)||k===allow)};
    const unused=x=>!x.names.some(n=>dayUsed.has(n));
    const pick=x=>{x.left--;const first=x.names.filter(isNew);first.forEach(n=>fresh.add(n));x.names.forEach(n=>dayUsed.add(n));items.push({batchId:x.b.id,name:x.b.name,role:x.role,names:x.names,first:first.length>0,due:x.e.due,baseNew:x.names.filter(n=>!seen(base,n,d)),guide:qSuggestGuide(x.names,stage),portion:String(x.b.portion||''),size:stockPortion(x.b)?stockPortionText(x.b):'',iron:qTagged(x.names,'iron'),vitaminC:qTagged(x.names,'vitaminC')})};
    for(const [role] of qSuggestRoles){
@@ -655,8 +671,9 @@ function qLegacyPlan(p,from){if(p.date<from||p.prepared||record(p)||p.note)retur
 // 1.4.0: 設定変更（開始日・時期・1食の品数・使う食事）からも why='設定'・rebuildOnly=true で呼ぶ。設定変更では空き枠への新規入力はせず、
 // 既存のおすすめ献立の組み直しだけを行う（対象の限定・1回化・取り消し可は同じ）。lead は設定側の通知で、組み直しがあったときだけ後ろに続く。
 // 窓全体（future でない・出す状態）の品は m.items、「出す」への切替（future）と「出さない」時の今日だけは従来どおり m.add（その日だけ入れる前提の数え直し）。
-async function qAutoApplySuggest({future=false,lead='',why='ストック',rebuildOnly=false}={}){
- const today=jstDate(),from=future?plusDate(today,1):today,all=state().plans,auto=all.filter(p=>qAutoPlan(p,from)),legacy=all.filter(p=>!auto.includes(p)&&qLegacyPlan(p,from)),targets=[...auto,...legacy],at=targets.map(p=>all.indexOf(p)),use=d=>future?d>today:(qWeekSuggestOn()||d===today);let s;
+async function qAutoApplySuggest({future=false,lead='',why='ストック',rebuildOnly=false,excludeId=null}={}){
+ // 1.4.5（要望B）: excludeId は、直前に手で編集した献立（その食事）だけを組み直しの対象から外すための指定（編集の保存に続く連動組み直しで使う）。
+ const today=jstDate(),from=future?plusDate(today,1):today,all=state().plans,auto=all.filter(p=>p.id!==excludeId&&qAutoPlan(p,from)),legacy=all.filter(p=>p.id!==excludeId&&!auto.includes(p)&&qLegacyPlan(p,from)),targets=[...auto,...legacy],at=targets.map(p=>all.indexOf(p)),use=d=>future?d>today:(qWeekSuggestOn()||d===today);let s;
  for(let k=at.length-1;k>=0;k--)all.splice(at[k],1);
  try{s=qSuggest(plusDate(today,-1))}finally{for(let k=0;k<at.length;k++)all.splice(at[k],0,targets[k])}
  if(!s)return false;const plans=[],key=x=>JSON.stringify(x.uses.map(u=>u.batchId).sort());let redo=0;
@@ -664,7 +681,7 @@ async function qAutoApplySuggest({future=false,lead='',why='ストック',rebuil
  if(!plans.length)return false;const fromD=plans[0].date,toD=plans[plans.length-1].date,range=fromD===toD?dateLabel(fromD):`${dateLabel(fromD)}〜${dateLabel(toD)}`,redoOnly=plans.length===redo;
  const body=future
   ?(redoOnly?`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`:`ストックに合わせて、${range}の空いている食事におすすめを入れました。${redo?`前に自動で入れたおすすめ${redo}食も入れ直しました。`:''}`)
-  :(redoOnly?(why==='設定'?`設定に合わせて、${range}の自動で入れたおすすめを組み直しました。`:why==='起動'?`開いたときに合わせて、${range}の自動で入れたおすすめを組み直しました。`:`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`)
+  :(redoOnly?(why==='設定'?`設定に合わせて、${range}の自動で入れたおすすめを組み直しました。`:why==='起動'?`開いたときに合わせて、${range}の自動で入れたおすすめを組み直しました。`:why==='編集'?`献立の変更に合わせて、${range}の自動で入れたおすすめを組み直しました。`:`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`)
    :`${why}に合わせて、${range}の空いている食事におすすめを入れました。${redo?`前に自動で入れたおすすめ${redo}食も組み直しました。`:''}`);
  return mutate('planMany',{plans},lead+body)}
 // 1.4.1（症状C）: アプリを開いた時点で、手つかずのおすすめ献立を現在の設定で組み直す。品数の少ない頃に入った献立が、

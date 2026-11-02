@@ -228,6 +228,7 @@ span.tRowMain{border-style:dashed}
 .tUpSlot{display:flex;gap:10px;align-items:baseline;padding:2px 0;min-width:0}
 .tUpLabel{flex:none;width:2em;color:var(--muted);font-size:13px}
 .tUpNames{flex:1;min-width:0;overflow-wrap:anywhere}
+.tUpOpenBtn{background:transparent;border:0;margin:0;padding:2px 0;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .tUpSuggest .tUpNames{color:var(--muted)}
 .tUpSuggest .tUpNames small{margin-right:6px;font-size:12px}
 .tUpShort{margin:2px 0 0}
