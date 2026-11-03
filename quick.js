@@ -288,12 +288,13 @@ function tUpcomingDay(d,s,on=true){
   if(dr){const shown=open&&dr.names.length?dr.names.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(dr.names.length?dr.names.join('・'):'食材なし');return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox(shown)}${act()}</li>`}
   if(p&&!tIsHusk(p)){const n=tMealNames(p,record(p)),shown=open&&tInlineEditable(p)&&n.length?n.map(x=>`<span class="tChip">${esc(x)}${tRemoveButton(d,slot,x)}</span>`).join(''):esc(n.length?n.join('・'):p.title);return `<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span>${namesBox((tFromSuggest(p)?tSuggestMark:'')+shown)}${act()}</li>`}
   // 1.4.6: 空き枠のおすすめは、閉じた行でも開いた行でもプレビュー自体がボタン（タップ＝入れる）。日を開かずに1タップで入る。
-  const m2=p?tReplaceMeal(d,slot,p.id):m;
+  // 1.5.0（追補）: 「出さない」の間は殻の枠にもプレビューを出さない（取り除いた食事が空に見えるように。出すときだけ tReplaceMeal で戻す）。
+  const m2=on?(p?tReplaceMeal(d,slot,p.id):m):null;
   if(m2&&!m2.taken&&m2.add.length)return `<li class="tUpSlot tUpSuggest"><span class="tUpLabel">${slots[slot]}</span>${tPreviewButton(m2,d,slot,'up','tUpNames tUpSuggestBtn')}${act()}</li>`;
   if(on&&(!m||!m.items.length))short=true;return open?`<li class="tUpSlot"><span class="tUpLabel">${slots[slot]}</span><span class="tUpNames"><small>${on?'まだありません':'献立なし'}</small></span>${act()}</li>`:'';
  }).join(''); // 1.4.2（要望3）: 使う食事の外の献立の1行（「（使う食事に入っていません）」）は今日画面に出さない（データは消さない）
  // 1.4.1（全体監査）: 「献立なし」は、その日に献立が1つも無いときだけ。使う食事の外の献立だけがある日は、外の1行が出るので同時に出さない。
- const can=Boolean(day?.meals.some(m=>!m.taken&&m.add.length)),none=!on&&!open&&!ps.length;
+ const can=Boolean(day?.meals.some(m=>!m.taken&&m.add.length)),none=!on&&!open&&!ps.some(p=>!tIsHusk(p));
  return `<li class="tUpDay${open?' open':''}" data-up-date="${d}"><div class="tUpHead"><button class="tUpDate" data-t="up-open" data-date="${d}" aria-expanded="${open}" aria-label="${esc(dateLabel(d))}のメニューを${open?'閉じる':'開く'}"><b>${esc(dateLabel(d))}</b></button></div>${rows?`<ul class="tUpSlots">${rows}</ul>`:''}${open&&can?`<div class="tUpDayActions"><button class="tUpAddIn" data-action="suggestPlan" data-date="${d}" aria-label="${esc(dateLabel(d))}のおすすめを献立に入れる" data-edit>この日のおすすめを入れる</button></div>`:''}${short?'<p class="small muted tUpShort">ストックが足りません</p>':''}${none?'<p class="small muted tUpShort">献立なし</p>':''}</li>`;
 }
 // ===== 1.4.0: 今日とこれからを1つの「メニュー」に統合 =====
@@ -636,6 +637,10 @@ function qSuggest(today=jstDate()){
  // 初めて食べた日（記録から導出）で判定し、対象日より前に食べた食材だけを経験済みにする（先の日付の記録は数えない）。
  // sim は提案どおり前の日から順に食べた前提（「はじめて」バッジの判定に使う。1.4.9：品数の制限には使わない）。
  const real=qEatenFoods(),sim=new Map(real),seen=(m,n,d)=>m.has(n)&&m.get(n)<d,mark=(m,n,d)=>{if(!m.has(n)||d<m.get(n))m.set(n,d)};
+ // 1.5.0: ローテーション用。食材ごとに「最後に出た日」と「出た回数」を数える。開始前の1週間（7日）の献立から数え始め、
+ // 週の組み立ての中で（その日の献立・記録と、前日までの提案の積み重ねで）1日ずつ更新する。乱数は使わない（同じ状態では必ず同じ結果）。
+ const lastUsed=new Map(),useCount=new Map(),useMark=(n,d)=>{if(d>(lastUsed.get(n)||''))lastUsed.set(n,d);useCount.set(n,(useCount.get(n)||0)+1)};
+ for(let k=7;k>=1;k--){const d0=plusDate(start,-k);for(const n of new Set(meals(d0).flatMap(qPlanFoodNames)))useMark(n,d0)}
  for(let d=start;usable.length&&d<=end;d=plusDate(d,1)){
   const planned=meals(d),dayNames=[...new Set([...planned.flatMap(qPlanFoodNames),...[...real].filter(([,x])=>x===d).map(([n])=>n)])],isNew=n=>!seen(sim,n,d);
   const fresh=new Set(dayNames.filter(isNew)),list=[];
@@ -651,12 +656,26 @@ function qSuggest(today=jstDate()){
    // 初めてかどうかは品の「はじめて」バッジ（first）でのみ示し、食べさせるかどうかは親が見る。
    const canFor=r=>x=>x.role===r&&x.left>0&&x.e.due>=d&&!(r==='主菜'&&early&&!qEarlyMainOk(x));
    const unused=x=>!x.names.some(n=>dayUsed.has(n));
-   // 1.4.9: 候補の並びの優先順位（pickFrom の段）。組み合わせ（pref）→その日まだ使っていない食材（unused）の順を基本に、
-   // 各段では「食べたことのある食材だけのロット」（eatenOnly）を「初めての食材を含むロット」より先に試す（並びの工夫）。
-   // 段ごとに候補が無ければ次の段に進むので、並びの工夫が品数の到達を妨げることはない。
-   const eatenOnly=x=>!x.names.some(isNew);
-   const pickFrom=levels=>{for(const conds of levels){const hit=usable.find(x=>conds.every(c=>c(x)));if(hit)return hit}return null};
-   const pick=x=>{x.left--;const first=x.names.filter(isNew);first.forEach(n=>fresh.add(n));x.names.forEach(n=>dayUsed.add(n));items.push({batchId:x.b.id,name:x.b.name,role:x.role,names:x.names,first:first.length>0,due:x.e.due,guide:qSuggestGuide(x.names,stage),portion:String(x.b.portion||''),size:stockPortion(x.b)?stockPortionText(x.b):'',iron:qTagged(x.names,'iron'),vitaminC:qTagged(x.names,'vitaminC')})};
+   // 1.4.9 の段（組み合わせ pref → その日まだ使っていない食材 unused → 食べたことのある食材だけのロット eatenOnly）は維持する。
+   // ただし 1.5.0 で eatenOnly の判定を、シミュレーション（sim）ではなく実際の食べた記録（real）に変えた。
+   // sim のままだと、週の組み立ての中で一度出した食材が「食べた」扱いになって段を占め続け、顔ぶれが固定されてしまうため。
+   // 実際の記録ベースなら、食べ済みの食材同士・初めての食材同士のどちらの中でも、下のスコア（ローテーション）が効く。
+   const eatenOnly=x=>x.names.every(n=>real.has(n)&&real.get(n)<d);
+   // 1.5.0: 段の中で候補が複数あるときの選び方（ローテーション）。スコア＝「最後に出てからの日数」
+   // （出たことがない食材は2日分として数える）＋期限の前倒し（期限が今日は5日分・明日は3日分・明後日は2日分。余らせないための寄せ）。
+   // 同点なら「出た回数が少ない順→期限の近い順」。最後の決め手は usable の並び（期限順）のままで安定させる。
+   const lotLast=x=>x.names.reduce((m,n)=>{const v=lastUsed.get(n)||'';return v>m?v:m},'');
+   const lotCount=x=>x.names.reduce((m,n)=>Math.max(m,useCount.get(n)||0),0);
+   const dayDiff=(a,b)=>Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000);
+   const lotScore=x=>{const last=lotLast(x),since=last?dayDiff(d,last):2,left=dayDiff(x.e.due,d);return since+(left<=0?5:left<=1?3:left<=2?2:0)};
+   const cmpLot=(a,b)=>{
+    const sa=lotScore(a),sb=lotScore(b);if(sa!==sb)return sb-sa;
+    const ca=lotCount(a),cb=lotCount(b);if(ca!==cb)return ca-cb;
+    if(a.e.due!==b.e.due)return a.e.due<b.e.due?-1:1;
+    return 0;
+   };
+   const pickFrom=levels=>{for(const conds of levels){const cands=usable.filter(x=>conds.every(c=>c(x)));if(cands.length)return cands.sort(cmpLot)[0]}return null};
+   const pick=x=>{x.left--;const first=x.names.filter(isNew);first.forEach(n=>fresh.add(n));x.names.forEach(n=>{dayUsed.add(n);useMark(n,d)});items.push({batchId:x.b.id,name:x.b.name,role:x.role,names:x.names,first:first.length>0,due:x.e.due,guide:qSuggestGuide(x.names,stage),portion:String(x.b.portion||''),size:stockPortion(x.b)?stockPortionText(x.b):'',iron:qTagged(x.names,'iron'),vitaminC:qTagged(x.names,'vitaminC')})};
    for(const [role] of qSuggestRoles){
     if(!limit.roles.includes(role))continue;
     const can=canFor(role);
@@ -699,6 +718,8 @@ function qSuggest(today=jstDate()){
   // 1.4.9: 「この日だけ入れる場合の数え直し」はしない。入れる品（add）は組み立てた品（items）そのまま（初めての食材の段取りで品を除かない）。
   for(const m of list)if(!m.taken)m.add=[...m.items];
   for(const n of fresh)mark(sim,n,d);
+  // 1.5.0: その日の献立・記録に出た食材も「出た」として数える（翌日以降のローテーションに効かせる）。
+  for(const n of dayNames)useMark(n,d);
   days.push({date:d,meals:list,cap:limit.cap,count:dayCount,early,roles:limit.roles});
  }
  const kinds=new Set(usable.flatMap(x=>x.names));
@@ -733,17 +754,32 @@ function qLegacyPlan(p,from){if(p.date<from||p.prepared||record(p)||p.note)retur
 // 窓全体（future でない・出す状態）の品は m.items、「出す」への切替（future）と「出さない」時の今日だけは m.add（1.4.9 以降は m.items と同じ）。
 async function qAutoApplySuggest({future=false,lead='',why='ストック',rebuildOnly=false,excludeId=null}={}){
  // 1.4.5（要望B）: excludeId は、直前に手で編集した献立（その食事）だけを組み直しの対象から外すための指定（編集の保存に続く連動組み直しで使う）。
- const today=jstDate(),from=future?plusDate(today,1):today,all=state().plans,auto=all.filter(p=>p.id!==excludeId&&qAutoPlan(p,from)),legacy=all.filter(p=>p.id!==excludeId&&!auto.includes(p)&&qLegacyPlan(p,from)),targets=[...auto,...legacy],at=targets.map(p=>all.indexOf(p)),use=d=>future?d>today:(qWeekSuggestOn()||d===today);let s;
+ const today=jstDate(),from=future?plusDate(today,1):today,all=state().plans,auto=all.filter(p=>p.id!==excludeId&&qAutoPlan(p,from)),legacy=all.filter(p=>p.id!==excludeId&&!auto.includes(p)&&qLegacyPlan(p,from)),targets=[...auto,...legacy];
+ // 1.5.0（追補）: 「出す」への切替（future）のときは、殻（中身を空にした献立）も計算の間だけ外して空き枠として扱い、同じ id で入れ直せるようにする。
+ // 殻のままだと枠が taken 扱いになり、「出さない」で取り除いた分が「出す」に戻しても入らなくなるため。通常の組み直し（rebuildOnly 等）では殻に触らない。
+ const husks=future?all.filter(p=>p.id!==excludeId&&!targets.includes(p)&&p.date>=from&&tIsHusk(p)):[],gone=[...targets,...husks],at=gone.map(p=>all.indexOf(p)),use=d=>future?d>today:(qWeekSuggestOn()||d===today);let s;
  for(let k=at.length-1;k>=0;k--)all.splice(at[k],1);
- try{s=qSuggest(plusDate(today,-1))}finally{for(let k=0;k<at.length;k++)all.splice(at[k],0,targets[k])}
+ try{s=qSuggest(plusDate(today,-1))}finally{for(let k=0;k<at.length;k++)all.splice(at[k],0,gone[k])}
  if(!s)return false;const plans=[],key=x=>JSON.stringify(x.uses.map(u=>u.batchId).sort());let redo=0;
- for(const day of s.days)for(const m of day.meals){if(m.taken||!use(day.date))continue;const basis=future||!qWeekSuggestOn()?m.add:m.items;if(!basis||!basis.length)continue;const x=qSuggestPlan(day.date,m,basis),old=auto.find(p=>p.date===day.date&&p.slot===m.slot),leg=old?null:legacy.find(p=>p.date===day.date&&p.slot===m.slot);if(old){if(key(old)===key(x))continue;x.id=old.id;redo++}else if(leg){const cur=new Set(qPlanFoodNames(leg)),neu=new Set(basis.flatMap(i=>i.names));if(!cur.size||![...cur].every(n=>neu.has(n))||neu.size<=cur.size)continue;x.id=leg.id;redo++}else if(rebuildOnly)continue;plans.push(x)}
+ for(const day of s.days)for(const m of day.meals){if(m.taken||!use(day.date))continue;const basis=future||!qWeekSuggestOn()?m.add:m.items;if(!basis||!basis.length)continue;const x=qSuggestPlan(day.date,m,basis),old=auto.find(p=>p.date===day.date&&p.slot===m.slot),leg=old?null:legacy.find(p=>p.date===day.date&&p.slot===m.slot),hk=(old||leg)?null:husks.find(p=>p.date===day.date&&p.slot===m.slot);if(old){if(key(old)===key(x))continue;x.id=old.id;redo++}else if(leg){const cur=new Set(qPlanFoodNames(leg)),neu=new Set(basis.flatMap(i=>i.names));if(!cur.size||![...cur].every(n=>neu.has(n))||neu.size<=cur.size)continue;x.id=leg.id;redo++}else if(hk){x.id=hk.id}else if(rebuildOnly)continue;plans.push(x)}
  if(!plans.length)return false;const fromD=plans[0].date,toD=plans[plans.length-1].date,range=fromD===toD?dateLabel(fromD):`${dateLabel(fromD)}〜${dateLabel(toD)}`,redoOnly=plans.length===redo;
  const body=future
   ?(redoOnly?`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`:`ストックに合わせて、${range}の空いている食事におすすめを入れました。${redo?`前に自動で入れたおすすめ${redo}食も入れ直しました。`:''}`)
   :(redoOnly?(why==='設定'?`設定に合わせて、${range}の自動で入れたおすすめを組み直しました。`:why==='起動'?`開いたときに合わせて、${range}の自動で入れたおすすめを組み直しました。`:why==='編集'?`献立の変更に合わせて、${range}の自動で入れたおすすめを組み直しました。`:`ストックに合わせて、${range}の自動で入れたおすすめを入れ直しました。`)
    :`${why}に合わせて、${range}の空いている食事におすすめを入れました。${redo?`前に自動で入れたおすすめ${redo}食も組み直しました。`:''}`);
  return mutate('planMany',{plans},lead+body)}
+// 1.5.0（追補）: 一週間のおすすめを「出さない」にしたとき、明日〜6日後の手つかずの自動おすすめ（qAutoPlan の線引き）を取り除く。
+// 献立を消す操作は無いので、1.4.6 の殻（中身を空にした献立・題名と id はそのまま）にして枠を空ける。保存は planMany の1回（取り消し可）。
+// 手で直した献立・記録済み・準備済み・今日の分は qAutoPlan の線引きで対象外。印の無い古い形式（qLegacyPlan）は「自動で入った」と
+// 断定できないため、組み直しの対象には含めても取り除きの対象には含めない。「出す」に戻したときは qAutoApplySuggest（future）が殻を入れ直す。
+async function qClearWeekAuto(lead){
+ const today=jstDate(),from=plusDate(today,1),to=plusDate(today,6);
+ const targets=state().plans.filter(p=>p.date>=from&&p.date<=to&&qAutoPlan(p,from)).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+ if(!targets.length)return false;
+ const plans=targets.map(p=>({id:p.id,date:p.date,slot:p.slot,title:p.title,note:p.note,foods:[],uses:[]}));
+ const fromD=targets[0].date,toD=targets[targets.length-1].date,range=fromD===toD?dateLabel(fromD):`${dateLabel(fromD)}〜${dateLabel(toD)}`;
+ return mutate('planMany',{plans},`${lead}${range}の自動で入れたおすすめ${targets.length}食を取り除きました。`);
+}
 // 1.4.1（症状C）: アプリを開いた時点で、手つかずのおすすめ献立を現在の設定で組み直す。品数の少ない頃に入った献立が、
 // 設定変更やストック追加のきっかけが無いまま残り続けるのを防ぐ（「開始日を3週間前にしたのに11/3以降が1種類だけ」の主因）。
 // 変わる場合だけ・開くごとに1回だけ走り、保存は planMany の1回にまとまる（通知1つ＋取り消し可）。あわせて、復元された古い訂正の下書きも最新の記録に追随させる。
