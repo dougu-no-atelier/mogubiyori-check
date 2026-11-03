@@ -524,12 +524,14 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
 });
 // 1.4.8: 開いた未来の日の余白（チップ・ボタン・リンク・入力などの操作要素でない場所）をタップしたら、その日を閉じる。
 // 閉じる動きは見出しの up-open と同じにする（下書きが残っていたら従来ルールどおり破棄。確認ダイアログは出さない）。
-// 操作要素のタップは上の各リスナーが従来どおり処理するので、ここでは閉じない。今日のカード（.tUpDay でない）と閉じた日には効かない。
+// 操作要素のタップは上の各リスナーが従来どおり処理するので、ここでは開閉しない。今日のカード（.tUpDay でない）には効かない。
+// 1.5.6: 閉じた日も余白のタップで開く（「＋ 自分で入れる」のボタンだけでは範囲が狭く押しにくいという声。開く範囲を日の欄全体に広げる）。
 document.addEventListener('click',e=>{
  if(!current)return;const t=e.target;if(!t||typeof t.closest!=='function')return;
  if(t.closest('button,a,input,select,textarea,summary,label,.tChip'))return;
- const day=t.closest('.tUpDay.open');if(!day||!day.dataset||day.dataset.upDate!==view.upOpen)return;
- tClearPlanDrafts();view.upOpen=null;render();
+ const day=t.closest('.tUpDay.open');if(day&&day.dataset&&day.dataset.upDate===view.upOpen){tClearPlanDrafts();view.upOpen=null;render();return}
+ const closed=t.closest('.tUpDay');if(!closed||!closed.dataset||!closed.dataset.upDate||closed.dataset.upDate===view.upOpen)return;
+ tClearPlanDrafts();view.upOpen=closed.dataset.upDate;render();
 });
 document.addEventListener('click',async e=>{const b=e.target.closest('button[data-q]');if(!b||b.disabled)return;const a=b.dataset.q;if(!current)return;
  if(a==='input-jump'){$('#main').scrollTo(0,0);return}if(a==='week-record'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qWeekDetail(r);return}
