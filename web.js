@@ -4,7 +4,7 @@ const INTRO_KEY='mogubi-web-intro:'+new URL('./',document.currentScript.src).pat
 function webIntro(){let seen=false;try{seen=localStorage.getItem(INTRO_KEY)==='yes'}catch{}return seen?'':'<aside class="webIntro"><p>登録なしで使えます。記録はこの端末だけに保存され、家族との自動同期はありません。</p><p>SNSアプリ内では、Safari・Chromeで開き直してからお使いください。</p><a href="./guide.html">使い方と保存の注意点</a> <button data-web="intro">確認して使う</button></aside>'}
 // 更新のお知らせ（1.5.1）。版ごとの文面を新しい順に持つ（先頭＝今の版）。「前回見た版」の控えは localStorage の単独キーだけに置き、保存データ本体（local-store）には混ぜない。
 const SEEN_VERSION_KEY='mogubi-web-seen-version:'+new URL('./',document.currentScript.src).pathname;
-const WEB_NEWS=[{version:'1.5.2',date:'2026-11-04',lines:['はちみつ・窒息など、安全についての案内を加えました。はちみつを含む名前を入れると注意が出ます','ストックの日数の表示を、作った日からの目安だと分かる言い方にそろえました','「データの取り扱い」のページを公開用に新しくしました']},{version:'1.5.1',date:'2026-11-03',lines:['おすすめの組み合わせが日ごとに変わるようになりました','『一週間のおすすめ』を出さないにすると、自動で入った献立が取り除かれるようになりました']}];
+const WEB_NEWS=[{version:'1.5.3',date:'2026-11-04',lines:['「一週間のおすすめ」を出さないときも、日をタップすれば自分の献立を入れられるようにしました']},{version:'1.5.2',date:'2026-11-04',lines:['はちみつ・窒息など、安全についての案内を加えました。はちみつを含む名前を入れると注意が出ます','ストックの日数の表示を、作った日からの目安だと分かる言い方にそろえました','「データの取り扱い」のページを公開用に新しくしました']},{version:'1.5.1',date:'2026-11-03',lines:['おすすめの組み合わせが日ごとに変わるようになりました','『一週間のおすすめ』を出さないにすると、自動で入った献立が取り除かれるようになりました']}];
 function webSeenVersion(){try{return localStorage.getItem(SEEN_VERSION_KEY)}catch{return null}}
 function webRememberVersion(v){try{localStorage.setItem(SEEN_VERSION_KEY,v)}catch{}}
 // 1.5.2: 控えが無くても、既存の利用者（最初の案内を確認済み、または保存データがある）は「前回見た版＝1.5.0」として扱う（1.5.1 では控えの無い既存の利用者に一度も出なかった）。
