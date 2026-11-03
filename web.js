@@ -1,14 +1,17 @@
 'use strict';
-let webRegistration=null,webReloading=false,webReloaded=false;
+let webRegistration=null,webReloading=false,webReloaded=false,webReloadHeld=false;
 const INTRO_KEY='mogubi-web-intro:'+new URL('./',document.currentScript.src).pathname;
 function webIntro(){let seen=false;try{seen=localStorage.getItem(INTRO_KEY)==='yes'}catch{}return seen?'':'<aside class="webIntro"><p>登録なしで使えます。記録はこの端末だけに保存され、家族との自動同期はありません。</p><p>SNSアプリ内では、Safari・Chromeで開き直してからお使いください。</p><a href="./guide.html">使い方と保存の注意点</a> <button data-web="intro">確認して使う</button></aside>'}
 // 更新のお知らせ（1.5.1）。版ごとの文面を新しい順に持つ（先頭＝今の版）。「前回見た版」の控えは localStorage の単独キーだけに置き、保存データ本体（local-store）には混ぜない。
 const SEEN_VERSION_KEY='mogubi-web-seen-version:'+new URL('./',document.currentScript.src).pathname;
-const WEB_NEWS=[{version:'1.5.1',date:'2026-11-03',lines:['おすすめの組み合わせが日ごとに変わるようになりました','『一週間のおすすめ』を出さないにすると、自動で入った献立が取り除かれるようになりました']}];
+const WEB_NEWS=[{version:'1.5.2',date:'2026-11-04',lines:['はちみつ・窒息など、安全についての案内を加えました。はちみつを含む名前を入れると注意が出ます','ストックの日数の表示を、作った日からの目安だと分かる言い方にそろえました','「データの取り扱い」のページを公開用に新しくしました']},{version:'1.5.1',date:'2026-11-03',lines:['おすすめの組み合わせが日ごとに変わるようになりました','『一週間のおすすめ』を出さないにすると、自動で入った献立が取り除かれるようになりました']}];
 function webSeenVersion(){try{return localStorage.getItem(SEEN_VERSION_KEY)}catch{return null}}
 function webRememberVersion(v){try{localStorage.setItem(SEEN_VERSION_KEY,v)}catch{}}
-// 今日画面の上に出すお知らせカード。控えが無い初めての人には出さず、今の版を控えるだけ。控えが今の版と違えば1回出し、閉じたら控えを今の版にして二度と出さない。
-function webWhatsNew(){const latest=WEB_NEWS[0];if(!latest)return '';const seen=webSeenVersion();if(seen===null){webRememberVersion(latest.version);return ''}if(seen===latest.version)return '';return `<aside class="webNews" aria-label="更新のお知らせ"><p><b>新しくなりました</b>（${latest.date}）</p><ul>${latest.lines.map(l=>`<li>${l}</li>`).join('')}</ul><button data-web="news">閉じる</button></aside>`}
+// 1.5.2: 控えが無くても、既存の利用者（最初の案内を確認済み、または保存データがある）は「前回見た版＝1.5.0」として扱う（1.5.1 では控えの無い既存の利用者に一度も出なかった）。
+// 保存データの有無は、描画の時点で読み込み済みの current（IndexedDB の中身）で見るので、今日画面の描画は待たせない。
+function webExistingUser(){try{if(localStorage.getItem(INTRO_KEY)==='yes')return true}catch{}const c=typeof current!=='undefined'?current:null,s=c?.state;if(!s)return false;return c.revision>0||Boolean(s.child?.name||s.note)||['foods','plans','batches','records','shopping','templates'].some(k=>Array.isArray(s[k])&&s[k].length>0)}
+// 今日画面の上に出すお知らせカード。本当の初回（控えなし・既存の利用者でない）は出さず、今の版を控えるだけ。控えが今の版と違えば1回出し、閉じたら控えを今の版にして二度と出さない。
+function webWhatsNew(){const latest=WEB_NEWS[0];if(!latest)return '';let seen=webSeenVersion();if(seen===null){if(!webExistingUser()){webRememberVersion(latest.version);return ''}seen='1.5.0'}if(seen===latest.version)return '';return `<aside class="webNews" aria-label="更新のお知らせ"><p><b>新しくなりました</b>（${latest.date}）</p><ul>${latest.lines.map(l=>`<li>${l}</li>`).join('')}</ul><button data-web="news">閉じる</button></aside>`}
 function webNewsHistory(){return WEB_NEWS.map(n=>`<div class="newsEntry"><p><b>版 ${n.version}</b>（${n.date}）</p><ul>${n.lines.map(l=>`<li>${l}</li>`).join('')}</ul></div>`).join('')}
 function webUpdateButton(){const b=document.querySelector('[data-web=update]');if(b)b.hidden=!webRegistration?.waiting}
 new MutationObserver(webUpdateButton).observe(document.querySelector('#screen'),{childList:true,subtree:true});
@@ -22,9 +25,15 @@ document.addEventListener('click',async e=>{
   if(b.dataset.web==='update'&&webRegistration?.waiting){if(busy||pendingMutation){showError('保存結果を確認してから更新してください。');return}draftPersist();if(!draftStorageOK){showError('入力を保存してから更新してください。');return}webReloading=true;webRegistration.waiting.postMessage({type:'ACTIVATE'})}
  }catch(err){showError(err.message||'この操作は利用できません。')}
 });
+// 1.5.2: 新しい版への自動の切り替え（controllerchange）でも入力を失わないよう、ダイアログが開いている間・保存の途中（pendingMutation）は再読み込みを保留し、
+// ダイアログが閉じたとき（close）・保存が終わったとき（app.js の mutate の最後）に1回だけ反映する。新しい版はもう有効なので、保留のまま閉じても次回起動時は新版になる。
+function webReloadBlocked(){try{return Boolean(document.querySelector('#dialog')?.open)||(typeof pendingMutation!=='undefined'&&Boolean(pendingMutation))||(typeof busy!=='undefined'&&busy===true)}catch{return false}}
+function webReloadNow(){if(webReloaded)return;if(webReloadBlocked()){webReloadHeld=true;return}webReloadHeld=false;webReloaded=true;try{if(typeof draftPersist==='function')draftPersist()}catch{}location.reload()}
+function webReloadRetry(){if(webReloadHeld)webReloadNow()}
 if('serviceWorker'in navigator&&window.isSecureContext){
  // Reload once when a new version takes over. Skip the first install (no previous controller) so a fresh page never reloads.
  let webController=navigator.serviceWorker.controller;
- navigator.serviceWorker.addEventListener('controllerchange',()=>{const prev=webController;webController=navigator.serviceWorker.controller;if(webReloaded||(!prev&&!webReloading))return;webReloaded=true;location.reload()});
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{const prev=webController;webController=navigator.serviceWorker.controller;if(webReloaded||(!prev&&!webReloading))return;webReloadNow()});
+ document.querySelector('#dialog')?.addEventListener('close',webReloadRetry);
  navigator.serviceWorker.register('./sw.js',{scope:'./'}).then(r=>{webRegistration=r;webUpdateButton();r.addEventListener('updatefound',()=>r.installing?.addEventListener('statechange',webUpdateButton))}).catch(()=>{/* Online recording remains available. Settings explain offline prerequisites. */});
 }
