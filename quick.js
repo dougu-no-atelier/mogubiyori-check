@@ -521,6 +521,15 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button[dat
  if(a==='row-add'){if(slots[b.dataset.slot]){const k=b.dataset.date+'|'+b.dataset.slot;if(view.recAddOpen===k){view.recAddOpen=null;render()}else{const p=meals(b.dataset.date).find(x=>x.slot===b.dataset.slot),r=p&&record(p);if(r&&qRecordDraftBusy(b.dataset.date,b.dataset.slot,r))showError(qDraftBusyMessage);else{view.recAddOpen=k;render()}}}}
  if(a==='rec-pick'){if(slots[b.dataset.slot])await tRecPick(b.dataset.date,b.dataset.slot,b.dataset.batch||'',b.dataset.name||'')}
 });
+// 1.4.8: 開いた未来の日の余白（チップ・ボタン・リンク・入力などの操作要素でない場所）をタップしたら、その日を閉じる。
+// 閉じる動きは見出しの up-open と同じにする（下書きが残っていたら従来ルールどおり破棄。確認ダイアログは出さない）。
+// 操作要素のタップは上の各リスナーが従来どおり処理するので、ここでは閉じない。今日のカード（.tUpDay でない）と閉じた日には効かない。
+document.addEventListener('click',e=>{
+ if(!current)return;const t=e.target;if(!t||typeof t.closest!=='function')return;
+ if(t.closest('button,a,input,select,textarea,summary,label,.tChip'))return;
+ const day=t.closest('.tUpDay.open');if(!day||!day.dataset||day.dataset.upDate!==view.upOpen)return;
+ tClearPlanDrafts();view.upOpen=null;render();
+});
 document.addEventListener('click',async e=>{const b=e.target.closest('button[data-q]');if(!b||b.disabled)return;const a=b.dataset.q;if(!current)return;
  if(a==='input-jump'){$('#main').scrollTo(0,0);return}if(a==='week-record'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qWeekDetail(r);return}
  if(a==='record-remove'){const r=state().records.find(r=>r.id===b.dataset.id);if(r)qRemoveRecordConfirm(r);return}
