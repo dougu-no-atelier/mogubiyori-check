@@ -230,6 +230,7 @@ span.tRowMain{border-style:dashed}
 .tUpNames{flex:1;min-width:0;overflow-wrap:anywhere}
 .tUpOpenBtn{background:transparent;border:0;margin:0;padding:2px 0;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .tUpSelfAdd{display:block;width:100%;padding:12px 0}
+.tAmt{font-size:.82em;color:var(--muted);white-space:nowrap}
 .tUpSuggest .tUpNames{color:var(--muted)}
 .tUpSuggest .tUpNames small{margin-right:6px;font-size:12px}
 .tUpShort{margin:2px 0 0}
