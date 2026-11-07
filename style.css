@@ -340,3 +340,10 @@ span.tRowMain{border-style:dashed}
 .tHead+.tabs{margin-top:10px}
 .tHead+.jMoreTop{margin-top:0}
 @media(max-width:400px){.tUpActions{padding-left:0}.tUpSlot .tAddPick{margin-left:0}.tAte{min-width:72px;padding:8px 10px}.tRemove{width:36px}.tRow{gap:6px}.tMealCountLabel{min-width:0;flex-basis:100%}.tStep button{width:38px;min-height:48px}.tDone{display:none}}
+
+/* 1.6.0: 本の進め方（初期） */
+.tSpineSwap{display:inline-block;margin-left:.4em;padding:0 .5em;border-radius:1em;font-size:.75em;background:#e8f1ff;color:#2a4d8f}
+.tSpineFrom,.tSpineLabel{display:block;color:inherit;opacity:.7}
+.tSpineNone{opacity:.55}
+.tSpineMemo{margin:.4em 0;font-size:.9em}
+.tSpineSkip,.tSpineShop{font-size:.85em;white-space:nowrap}

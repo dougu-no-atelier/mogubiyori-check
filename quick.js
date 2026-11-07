@@ -71,7 +71,7 @@ const tSuggestMark='<span class="tSuggestMark">おすすめ</span>';
 // 空の枠のおすすめのプレビュー（今日のメニュー・一週間で同じ形）。食材は薄い表示で、ボタンは呼ぶ側が付ける。
 function tPreviewMarkup(m){return `<span class="tPreview">${tSuggestMark}<span class="tPreviewNames">${m.add.map(i=>esc(i.name)+(i.first?'<span class="qFirstBadge">はじめて</span>':'')).join('・')}</span></span>`}
 // 今日画面の冒頭の1行。表示中の日の使う食事に、おすすめ由来の献立かプレビューがあるときだけ。
-function tSuggestLead(d,day){const has=tSlots(d).some(slot=>{const p=meals(d).find(x=>x.slot===slot);if(p)return tFromSuggest(p);const m=day?.meals.find(x=>x.slot===slot);return Boolean(m&&!m.taken&&m.add.length)});return has?'<p class="tLead">ストックから作ったおすすめが入っています。そのまま使っても、直しても大丈夫です</p>':''}
+function tSuggestLead(d,day){const has=tSlots(d).some(slot=>{const p=meals(d).find(x=>x.slot===slot);if(spineHolds(d,slot,p))return false;if(p)return tFromSuggest(p);const m=day?.meals.find(x=>x.slot===slot);return Boolean(m&&!m.taken&&m.add.length)});return has?'<p class="tLead">ストックから作ったおすすめが入っています。そのまま使っても、直しても大丈夫です</p>':''}
 // 一週間のおすすめ（明日〜6日後）を出すか。プロフィールの任意項目 weekSuggest（false のときだけ出さない。未設定は出す）。今日の分はこの切替の対象外。
 function qWeekSuggestOn(){return state().child?.weekSuggest!==false}
 function tWeekToggle(){const on=qWeekSuggestOn();return `<div class="tMealCount tWeekToggle"><span class="tMealCountLabel">一週間のおすすめ</span><span class="tMealCountBtns" role="group" aria-label="一週間のおすすめ"><button data-action="weekSuggest" data-value="on" aria-pressed="${on}" data-edit>出す</button><button data-action="weekSuggest" data-value="off" aria-pressed="${!on}" data-edit>出さない</button></span></div>`}
@@ -198,14 +198,134 @@ function tRowBtnsMarkup(d,slot,name){return `<span class="tStep"><button data-t=
 // どちらも無い食材（目安を決めていない おかゆ類・食パンなど）は量を付けない（無い量は作らない）。
 function tStockUseAmount(p,name){if(!p?.uses?.length)return '';const u=p.uses.find(x=>batch(x.batchId)?.name===name);if(!u)return '';const sp=stockPortion(batch(u.batchId));if(!sp||sp.unit==='whole')return '';const q=Number(u.quantity)||1;return portionAmountLabel(sp.unit,sp.amount*q,100)}
 function tPlanAmount(p,name){const s=tStockUseAmount(p,name);if(s)return s;const g=qGuideMid(name);return g?'目安 '+qAmount(g):''}
-function tRowMarkup(d,slot,name,r,removable=false,editing=false){const done=tRecordedItem(r,name),t=done?null:qOneTap(name);let sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);if(!done&&t.amount==null){const sa=tStockUseAmount(meals(d).find(x=>x.slot===slot),name);if(sa)sub='ストック '+sa}return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):editing?'':`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}</div>`}
+// ===== 1.6.0: 本の進め方（初期）=====
+// 初期の今日カードだけ、56日分の「順番」を仮想の行として出す。位置は records から毎回導出し、保存しない。
+// 保存データ（local-store の形式）には触れない。ON/OFF と見送りは単独の localStorage キー（SEEN_VERSION_KEY と同じ流儀）。
+const SPINE_ON_KEY='mogubi-spine-on:'+new URL('./',document.currentScript.src).pathname;
+const SPINE_SKIP_KEY='mogubi-spine-skip:'+new URL('./',document.currentScript.src).pathname;
+// 1日分＝[名前,本の量ラベル|null] の配列。1〜28日=5カ月目、29〜56日=6カ月目。量ラベルは表示専用（換算しない）。
+const SPINE=[
+ [['10倍がゆ','小さじ1']],
+ [['10倍がゆ','小さじ1']],
+ [['10倍がゆ','小さじ1〜2']],
+ [['10倍がゆ','小さじ1〜2']],
+ [['10倍がゆ','小さじ2〜3']],
+ [['10倍がゆ','小さじ2〜3']],
+ [['10倍がゆ','小さじ2〜3']],
+ [['10倍がゆ','小さじ2〜4'],['にんじん','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['にんじん','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['かぼちゃ','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['かぼちゃ','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['りんご','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['りんご','小さじ1']],
+ [['10倍がゆ','小さじ2〜4'],['りんご','小さじ1']],
+ [['10倍がゆ','小さじ3〜5'],['かぼちゃ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ3〜5'],['かぼちゃ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ3〜5'],['かぼちゃ','小さじ2'],['しらす','小さじ1']],
+ [['10倍がゆ','小さじ3〜5'],['にんじん','小さじ2'],['しらす','小さじ1']],
+ [['10倍がゆ','小さじ3〜5'],['ほうれん草','小さじ1'],['にんじん','小さじ1'],['しらす','小さじ1']],
+ [['10倍がゆ','小さじ3〜5'],['ほうれん草','小さじ1'],['にんじん','小さじ1'],['豆腐','6g']],
+ [['10倍がゆ','小さじ3〜5'],['かぼちゃ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ4〜5'],['バナナ','小さじ1'],['かぼちゃ','小さじ1'],['豆腐','6g']],
+ [['10倍がゆ','小さじ4〜5'],['ブロッコリー','小さじ1'],['バナナ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ4〜5'],['ブロッコリー','小さじ1'],['かぼちゃ','小さじ2'],['しらす','小さじ1']],
+ [['10倍がゆ','小さじ4〜5'],['ブロッコリー','小さじ2'],['かぼちゃ','小さじ1'],['しらす','小さじ1']],
+ [['10倍がゆ','小さじ4〜5'],['トマト','小さじ1'],['バナナ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ4〜5'],['トマト','小さじ2'],['バナナ','小さじ2'],['豆腐','6g']],
+ [['10倍がゆ','小さじ4〜5'],['かぼちゃ','小さじ2〜3'],['バナナ','小さじ1'],['豆腐','6g']],
+ [['10倍がゆ',null],['じゃがいも','小さじ1'],['りんご',null],['豆腐','12g']],
+ [['10倍がゆ',null],['じゃがいも','小さじ2'],['かぶ','小さじ1'],['バナナ',null],['豆腐','12g']],
+ [['10倍がゆ',null],['バナナ',null],['かぶ','小さじ2'],['りんご',null]],
+ [['10倍がゆ',null],['玉ねぎ','小さじ1'],['豆腐','12g'],['りんご',null]],
+ [['10倍がゆ',null],['ひらめ','小さじ1'],['かぶ',null],['玉ねぎ','小さじ2']],
+ [['10倍がゆ',null],['ひらめ','小さじ2'],['玉ねぎ',null],['りんご',null]],
+ [['10倍がゆ',null],['バナナ',null],['じゃがいも',null],['玉ねぎ',null],['りんご',null]],
+ [['10倍がゆ',null],['にんじん',null],['白菜','小さじ1'],['りんご',null],['豆腐','12g']],
+ [['10倍がゆ',null],['白菜','小さじ2'],['豆腐','12g'],['りんご',null]],
+ [['10倍がゆ',null],['豆腐','12g'],['にんじん',null],['さつまいも','小さじ1'],['りんご',null]],
+ [['10倍がゆ',null],['さつまいも','小さじ2'],['白菜',null],['鯛','小さじ1']],
+ [['10倍がゆ',null],['にんじん',null],['りんご',null],['さつまいも',null],['鯛','小さじ2']],
+ [['10倍がゆ',null],['にんじん',null],['白菜',null],['豆腐','12g']],
+ [['10倍がゆ',null],['鯛',null],['にんじん',null],['さつまいも',null],['りんご',null]],
+ [['10倍がゆ',null],['鯛',null],['にんじん',null],['バナナ',null],['きな粉',null]],
+ [['10倍がゆ',null],['かぼちゃ',null],['バナナ',null],['きな粉',null],['豆腐','12g']],
+ [['10倍がゆ',null],['小松菜','小さじ1'],['鯛',null],['にんじん',null]],
+ [['10倍がゆ',null],['小松菜','小さじ2'],['バナナ',null],['豆腐','12g']],
+ [['10倍がゆ',null],['鯛',null],['きゅうり','小さじ1'],['にんじん',null],['かぼちゃ',null],['きな粉',null]],
+ [['10倍がゆ',null],['かぼちゃ',null],['きゅうり','小さじ2'],['にんじん',null],['豆腐','12g']],
+ [['10倍がゆ',null],['鯛',null],['小松菜',null],['かぼちゃ',null],['きな粉',null]],
+ [['10倍がゆ',null],['パンがゆ','小さじ1'],['トマト',null],['バナナ',null],['豆腐','12g']],
+ [['10倍がゆ',null],['パンがゆ','小さじ2'],['かぶ',null],['にんじん',null],['バナナ',null],['きな粉',null]],
+ [['10倍がゆ',null],['かぶ',null],['にんじん',null],['ひらめ',null]],
+ [['10倍がゆ',null],['トマト',null],['ひらめ',null],['バナナ',null],['きな粉',null]],
+ [['パンがゆ',null],['にんじん',null],['キャベツ','小さじ1'],['豆腐','12g']],
+ [['10倍がゆ',null],['キャベツ','小さじ2'],['にんじん',null],['バナナ',null],['きな粉',null],['ひらめ',null]],
+ [['10倍がゆ',null],['かぶ',null],['にんじん',null],['ひらめ',null]]
+];
+// 分類を持たない計画の食材だけの補助（qFoodGroups は買い足し候補・提案にも使われるので変えない）。
+const spineGroupExtra={'10倍がゆ':'grains','パンがゆ':'grains','白菜':'vegfruit'};
+function spineNorm(n){return String(n??'').normalize('NFKC').replace(/ペースト/g,'').replace(/\s+/g,'').trim()}
+function spineGroup(n){const k=spineNorm(n);return spineGroupExtra[k]||qFoodGroup(k)}
+// 初登場日＝その食材が計画に最初に出る日（別途フラグを持たず、SPINE から機械的に導く）。
+let spineFirstMap=null;
+function spineFirstDay(name){if(!spineFirstMap){spineFirstMap=new Map();SPINE.forEach((day,i)=>{for(const [n] of day)if(!spineFirstMap.has(n))spineFirstMap.set(n,i+1)})}return spineFirstMap.get(name)??null}
+let spineOffMem=false;
+function spineOn(){try{const v=localStorage.getItem(SPINE_ON_KEY);if(v!==null)return v!=='off'}catch{}return !spineOffMem}
+function spineSetOn(on){spineOffMem=!on;try{localStorage.setItem(SPINE_ON_KEY,on?'on':'off')}catch{}}
+// 見送りの控え（保存データの外）。{name:表示名,plan:計画の食材名,date:見送った日,added?:今日の計画へ足した日}。14日より古いものは書くときに捨てる。
+function spineSkips(){try{const v=JSON.parse(localStorage.getItem(SPINE_SKIP_KEY)||'[]');return Array.isArray(v)?v.filter(x=>x&&typeof x.name==='string'&&typeof x.plan==='string'&&validDay(x.date)):[]}catch{return []}}
+function spineSkipsSave(list){const from=plusDate(jstDate(),-14),keep=list.filter(x=>x.date>=from).slice(-60);try{localStorage.setItem(SPINE_SKIP_KEY,JSON.stringify(keep))}catch{}}
+// 今日の計画日。開始日（qStartInfo）から今日の前日までに、実際に食べた記録が1件以上ある distinct な日の数＋1。56を超えたら null（背骨は終わり）。
+// 「食べなかった」だけの記録の日は数えない（食べた分だけ進む、という原則どおり）。
+function spineDay(d=jstDate()){
+ const info=qStartInfo(d);if(info.source==='period'||(info.source&&info.day<1))return null;
+ const plans=new Map(state().plans.map(p=>[p.id,p])),days=new Set();
+ for(const r of state().records){const p=plans.get(r.planId);if(!p||!qEatenNames(r).length)continue;const x=qRecordDay(r,p);if(validDay(x)&&x<d&&(!info.start||x>=info.start))days.add(x)}
+ const n=days.size+1;return n>SPINE.length?null:n}
+function spineActiveDay(d){if(d!==jstDate()||!spineOn()||qStageKey()!=='初期')return null;return spineDay(d)}
+// 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
+function spineOwned(p){return !p||tIsHusk(p)||Boolean(p.quickCreated)||p.note===qSuggestNote}
+function spineHolds(d,slot,p){return Boolean(spineActiveDay(d))&&slot===tSlots(d)[0]&&spineOwned(p)}
+// 計画日の食材を順に解決する。a=ストック一致 b=同じ分類で差し替え（食べたことがある＞賞味目安が近い順） c=ストックなし。
+function spineRows(d,day){
+ const plan=SPINE[day-1],skips=spineSkips(),eaten=qEatenFoods(),stock=stockSorted(state().batches.filter(b=>b.quantity>0)),planNorms=new Set(plan.map(([n])=>spineNorm(n))),used=new Set(),rows=[];
+ const amt=b=>{const sp=b&&stockPortion(b);return sp&&sp.unit!=='whole'?portionAmountLabel(sp.unit,sp.amount,100):''};
+ const hit=n=>{for(const b of stock)for(const x of qStockNames(b))if(spineNorm(x)===n)return {b,x};return null};
+ for(const [name,label] of plan){
+  if(skips.some(s=>s.date===d&&!s.added&&s.plan===name))continue;
+  const n=spineNorm(name),first=spineFirstDay(name)===day,m=hit(n);
+  if(m){if(used.has(n))continue;used.add(n);rows.push({kind:'match',name:n,plan:name,label,stockAmt:amt(m.b),skippable:first&&!eaten.has(n)});continue}
+  const g=spineGroup(n);let pick=null;
+  if(g){const cands=[];for(const b of stock)for(const x of qStockNames(b)){const k=spineNorm(x);if(spineGroup(k)===g&&!planNorms.has(k)&&!used.has(k)&&!cands.some(c=>c.k===k))cands.push({b,x,k})}pick=cands.find(c=>eaten.has(c.x))||cands[0]||null}
+  if(pick){used.add(pick.k);rows.push({kind:'swap',name:pick.x,plan:name,label,stockAmt:amt(pick.b),skippable:first&&!eaten.has(pick.x)});continue}
+  rows.push({kind:'none',name:n,plan:name,label,stockAmt:'',skippable:false})
+ }
+ // 前日に見送り、「今日の計画に足す」を押した食材。
+ for(const s of skips)if(s.added===d){const k=spineNorm(s.name);if(used.has(k))continue;used.add(k);const m=hit(k);rows.push({kind:'carry',name:s.name,plan:s.plan,label:null,stockAmt:m?amt(m.b):'',skippable:false})}
+ return rows}
+// 前日に見送った食材の1行メモ（今日の行に出ているもの・もう食べたものは出さない）。
+function spineMemo(d,rows){const y=plusDate(d,-1),eaten=qEatenFoods(),shown=new Set(rows.map(r=>r.name));return spineSkips().filter(s=>s.date===y&&!s.added&&!eaten.has(s.name)&&!shown.has(s.name)&&!shown.has(spineNorm(s.name))).map(s=>`<p class="tSpineMemo">見送った食材：<b>${esc(s.name)}</b><button class="linkButton" data-t="spine-carry" data-name="${esc(s.name)}" data-plan="${esc(s.plan)}" data-from="${s.date}" data-edit>今日の計画に足す</button></p>`).join('')}
+function spineMeal(d,slot,p){if(!spineHolds(d,slot,p))return null;const day=spineActiveDay(d),rows=spineRows(d,day);return {day,rows,memo:spineMemo(d,rows)}}
+function spineRowNotes(sp){return (sp.kind==='swap'?`<span class="tSpineSwap">差し替え</span><small class="tSpineFrom">（計画は${esc(sp.plan)}）</small>`:'')+(sp.label?`<small class="tSpineLabel">計画：${esc(sp.label)}</small>`:'')}
+function spineSkipButton(sp){return `<button class="linkButton tSpineSkip" data-t="spine-skip" data-plan="${esc(sp.plan)}" data-name="${esc(sp.name)}" aria-label="${esc(sp.name)}を今日は見送る" data-edit>今日は見送る</button>`}
+function spineNoneRow(x){return `<div class="tRow tSpineNone"><span class="tRowMain"><b>${esc(x.name)}</b>${qIsFirstFood(x.name)?'<span class="qFirstBadge">はじめて</span>':''}<small>ストックなし${x.label?'・計画：'+esc(x.label):''}</small></span><button class="linkButton tSpineShop" data-action="suggestShop" data-name="${esc(x.name)}" aria-label="${esc(x.name)}を買い物リストに追加" data-edit>買い物へ</button></div>`}
+function spineBody(d,slot,r,sp){
+ const rows=sp.rows.map(x=>x.kind==='none'&&!(r&&tRecordedItem(r,x.name))?spineNoneRow(x):tRowMarkup(d,slot,x.name,r,false,false,x)),shown=new Set(sp.rows.map(x=>x.name)),extra=r?tMealNames(null,r).filter(n=>!shown.has(n)):[];
+ const html=rows.join('')+extra.map(n=>tRowMarkup(d,slot,n,r)).join('');
+ return sp.memo+(html||'<p class="small muted tDraftEmpty">今日の計画はすべて見送りました。</p>')}
+function spineSkip(plan,name){const d=jstDate();if(view.date!==d||!plan||!name)return;const list=spineSkips().filter(s=>!(s.date===d&&s.plan===plan));list.push({name,plan,date:d});spineSkipsSave(list);showStatus(name+'は今日は見送りました。');render()}
+function spineCarry(plan,name,from){const d=jstDate(),list=spineSkips(),s=list.find(x=>x.plan===plan&&x.name===name&&x.date===from&&!x.added);if(!s)return;s.added=d;spineSkipsSave(list);render()}
+function spineSettingMarkup(){const on=spineOn();return `<p>本の進め方（初期）：${on?'使う':'使わない'}<small>（初期の時期だけ、今日のメニューを決まった順番で出します。食べた記録がついた日だけ進みます）</small> <button data-t="spine-toggle" aria-pressed="${on}">${on?'使わない':'使う'}</button></p>`}
+function tRowMarkup(d,slot,name,r,removable=false,editing=false,sp=null){const done=tRecordedItem(r,name),t=done?null:qOneTap(name);let sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);if(!done&&t.amount==null){const sa=tStockUseAmount(meals(d).find(x=>x.slot===slot),name)||(sp?sp.stockAmt:'');if(sa)sub='ストック '+sa}return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}${sp&&!done?spineRowNotes(sp):''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):editing?'':`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}${sp&&sp.skippable&&!done?spineSkipButton(sp):''}</div>`}
 function tMealMarkup(d,slot,day){
- const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p),dr=tPlanDraft(d,slot);
+ const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p),dr=tPlanDraft(d,slot),sp=dr?null:spineMeal(d,slot,p);
  // 題名が食材名の列挙そのもの（提案から入れた献立など）なら、カード内の食材名と重複するので見出しには出さない。食材未登録のときは本文側で題名を出す。
- const headTitle=p&&!p.quickCreated&&names.length&&p.title&&p.title!==qPlanNames(p).join('・')?`<span class="tMealTitle">${esc(p.title)}</span>`:'',pill=r?`<span class="pill ${planRecordChanged(p,r)?'':'green'}">${esc(status(p))}</span>`:'';
+ const headTitle=!sp&&p&&!p.quickCreated&&names.length&&p.title&&p.title!==qPlanNames(p).join('・')?`<span class="tMealTitle">${esc(p.title)}</span>`:'',pill=r?`<span class="pill ${planRecordChanged(p,r)?'':'green'}">${esc(status(p))}</span>`:'';
  let body;
  // 1.4.7: 下書きがある間は、下書きの食材で描く（保存済みは変えない）。編集中の行に「食べた」は出さない（記録は決定してから）。
  if(dr)body=dr.names.length?dr.names.map(n=>tRowMarkup(d,slot,n,null,true,true)).join(''):'<p class="small muted tDraftEmpty">食材が入っていません。</p>';
+ // 1.6.0: 背骨が受け持つ枠は、計画の解決結果を仮想の行として描く（データは書き換えない）。
+ else if(sp)body=spineBody(d,slot,r,sp);
  // 1.3.0: 食材ごとの「×」（外す）。足す・外すができるのは未記録・未準備の献立だけ。
  else if(p&&names.length)body=names.map(n=>tRowMarkup(d,slot,n,r,inline)).join('');
  else if(p&&!husk)body=`<div class="tRow ${r?'done':''}"><span class="tRowMain"><b>${esc(p.title)}</b><small>${r?esc(r.result):'食材は未登録'}</small></span>${r?'<span class="tDone">記録済み</span>':`<button class="tAte" data-action="quickRecord" data-id="${p.id}" data-result="食べた" aria-label="${esc(p.title)}を食べたで記録" data-edit>食べた</button>`}</div>`;
@@ -216,8 +336,8 @@ function tMealMarkup(d,slot,day){
  // 記録済みの操作（様子・メモ／食材・量を訂正／行の − ＋）は従来どおり。
  const prepare=p&&p.uses.length&&!p.prepared&&!planStockConflict(p).length?`<button class="linkButton" data-action="prepare" data-id="${p.id}" data-edit>冷凍庫から出す</button>`:'';
  // 1.4.7: 下書きがある間は足元の操作を「＋ 食材を足す」と「決定／戻る」だけにする（出す・編集フォームは決定か戻るのあと）。
- const foot=dr?`${tAddButton(d,slot)}${tDraftButtons(d,slot)}`:(husk||!p)?tAddButton(d,slot,'自分で食材を選ぶ'):[inline?tAddButton(d,slot):'',prepare,r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
- return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}${r?tRecAddPicker(d,slot):''}</article>`;
+ const foot=dr?`${tAddButton(d,slot)}${tDraftButtons(d,slot)}`:sp?[inline?tAddButton(d,slot,'自分で食材を選ぶ'):'',r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',r?tEditMealButton(d,slot):''].filter(Boolean).join(''):(husk||!p)?tAddButton(d,slot,'自分で食材を選ぶ'):[inline?tAddButton(d,slot):'',prepare,r?`<button class="linkButton" data-action="detail" data-id="${p.id}" data-edit>様子・メモ</button>`:'',tEditMealButton(d,slot)].filter(Boolean).join('');
+ return `<article class="tMeal" data-meal-slot="${slot}"><div class="tMealHead"><h3>${slots[slot]}</h3>${sp?'<span class="tSuggestMark">本の進め方</span>':tFromSuggest(p)?tSuggestMark:''}${headTitle}${pill}</div>${body}<div class="tMealFoot">${foot}</div>${inline?tAddPicker(d,slot):''}${r?tRecAddPicker(d,slot):''}</article>`;
 }
 // 編集フォーム（tEditMeal）への入口。1.3.0 から足す・外すはカードの上でできるので、副操作の小さなリンクにした（記録済み→食材・量を訂正、献立あり→献立を編集）。
 // 1.4.6: 空き枠の「献立を追加」は廃止した（「自分で食材を選ぶ」に一本化）ので、献立が無い枠ではこの入口自体を出さない。
@@ -503,6 +623,9 @@ function tAdjust(date,slot,name){
  quickAmountRow=null;render();qOpenAmount(n);
 }
 document.addEventListener('click',async e=>{const b=e.target.closest('button[data-t]');if(!b||b.disabled||!current)return;const a=b.dataset.t;
+ if(a==='spine-toggle'){spineSetOn(!spineOn());render();return}
+ if(a==='spine-skip'){spineSkip(b.dataset.plan,b.dataset.name);return}
+ if(a==='spine-carry'){spineCarry(b.dataset.plan,b.dataset.name,b.dataset.from);return}
  if(a==='free'){view.todayFree=!view.todayFree;render();if(view.todayFree)qJump($('#freeComposer'));return}
  if(a==='free-slot'){view.quickSlot=b.dataset.slot;view.todayFree=true;quickAmountRow=null;render();qJump($('#freeComposer'));return}
  // 1.4.0: メニュー内の小さなリンク「メニューにないものを記録」。1.4.2（要望3）で入口は記録タブの先頭へ移した。
