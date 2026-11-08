@@ -363,3 +363,8 @@ span.tRowMain{border-style:dashed}
 .recipeGroup>h3{margin:0 0 10px;font-size:16px}
 .recipeEntry{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
 .recipeEntry>h3{margin:0 0 6px;font-size:16px}
+.stockDelete{color:#792d1c}
+.tAddCustom{margin-top:14px}
+.tAddCustomRow{display:flex;gap:8px;margin-top:6px}
+.tAddCustomRow input{flex:1;min-width:0;padding:10px 14px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
+.tAddCustomRow button{padding:10px 18px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
