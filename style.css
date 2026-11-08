@@ -364,7 +364,9 @@ span.tRowMain{border-style:dashed}
 .recipeEntry{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
 .recipeEntry>h3{margin:0 0 6px;font-size:16px}
 .stockDelete{color:#792d1c}
-.tAddCustom{margin-top:14px}
-.tAddCustomRow{display:flex;gap:8px;margin-top:6px}
-.tAddCustomRow input{flex:1;min-width:0;padding:10px 14px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
-.tAddCustomRow button{padding:10px 18px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
+/* 食材ピッカー: 一覧はスクロール、書く欄は右側の列 */
+.tAddPickMain{display:flex;gap:10px;align-items:flex-start}
+.tAddScroll{flex:1;min-width:0;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.tAddCustom{width:138px;flex:none}
+.tAddCustom input{width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;font:inherit;background:var(--white);color:inherit}
+.tAddCustom button{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
