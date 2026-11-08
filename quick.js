@@ -409,9 +409,11 @@ function spineDay(d=jstDate()){const e=spineElapsed(d,false);return e===null||e>
 function spineChukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)return null;const n=e-SPINE.length;return n>=1&&n<=SPINE_CHUKI.length?n:null}
 // 後期の位置＝E−112（1〜84）。範囲外は null。relax（時期のみ選択・開始日なしでも記録があれば進む）は中期と同じ。
 function spineKoukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)return null;const n=e-SPINE.length-SPINE_CHUKI.length;return n>=1&&n<=SPINE_KOUKI.length?n:null}
-function spineActiveDay(d){if(d!==jstDate()||!spineOn())return null;const st=qStageKey();return st==='初期'?spineDay(d):st==='中期'?spineChukiDay(d):st==='後期'?spineKoukiDay(d):null}
+// 背骨の時期。設定の時期（「今の時期」の選択＞段階メモの語）があればそれを使う。どちらも無いときは、食べた日数 E の帯から推定する（1.8.2: 時期を選んでいない実利用でも背骨が出るように。明示した時期の扱いは従来どおり）。
+function spineStage(d){const st=qStageKey();if(st)return st;const e=spineElapsed(d,true);if(e===null)return '';return e<=SPINE.length?'初期':e<=SPINE.length+SPINE_CHUKI.length?'中期':e<=SPINE.length+SPINE_CHUKI.length+SPINE_KOUKI.length?'後期':''}
+function spineActiveDay(d){if(d!==jstDate()||!spineOn())return null;const st=spineStage(d);return st==='初期'?spineDay(d):st==='中期'?spineChukiDay(d):st==='後期'?spineKoukiDay(d):null}
 // 背骨が受け持つ枠の番号。初期は使用枠の1番目だけ、中期は1・2番目、後期は1〜3番目。受け持たない枠は -1。
-function spineSlotIdx(d,slot){const i=tSlots(d).indexOf(slot),st=qStageKey();return i>=0&&i<(st==='後期'?3:st==='中期'?2:1)?i:-1}
+function spineSlotIdx(d,slot){const i=tSlots(d).indexOf(slot),st=spineStage(d);return i>=0&&i<(st==='後期'?3:st==='中期'?2:1)?i:-1}
 // 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
 function spineOwned(p){return !p||tIsHusk(p)||Boolean(p.quickCreated)||p.note===qSuggestNote}
 function spineHolds(d,slot,p){return Boolean(spineActiveDay(d))&&spineSlotIdx(d,slot)>=0&&spineOwned(p)}// 計画日の食材を順に解決する。a=ストック一致 b=同じ分類で差し替え（食べたことがある＞賞味目安が近い順） c=ストックなし。
@@ -448,7 +450,7 @@ function spineMemo(d,rows){const y=plusDate(d,-1),eaten=qEatenFoods(),shown=new 
 function spineMeal(d,slot,p){
  if(!spineHolds(d,slot,p))return null;
  const day=spineActiveDay(d),i=spineSlotIdx(d,slot);
- const st=qStageKey(),bk=st==='中期'?[SPINE_CHUKI,CHUKI_OPT]:st==='後期'?[SPINE_KOUKI,KOUKI_OPT]:null;
+ const st=spineStage(d),bk=st==='中期'?[SPINE_CHUKI,CHUKI_OPT]:st==='後期'?[SPINE_KOUKI,KOUKI_OPT]:null;
  if(bk){const shared=new Map(),slots2=tSlots(d);let rows=null,memo='';for(let k=0;k<=i;k++){const pk=k<i?meals(d).find(x=>x.slot===slots2[k]):p;if(k<i&&pk&&!spineOwned(pk)){for(const u of pk.uses||[])shared.set(u.batchId,(shared.get(u.batchId)||0)+(Number(u.quantity)||1));continue}const r=spineRows(d,day,bk[0][day-1][k].map(n=>[n,null]),{...bk[1],carry:k===0},shared);if(k===i){rows=r;if(k===0)memo=spineMemo(d,r)}}return {day,rows,memo}}
  const rows=spineRows(d,day);return {day,rows,memo:spineMemo(d,rows)}}
 function spineRowNotes(sp){return (sp.kind==='swap'?`<span class="tSpineSwap">差し替え</span><small class="tSpineFrom">（計画は${esc(sp.plan)}）</small>`:'')+(sp.kind==='fruit'?'<small class="tSpineFrom">（お好みの果物）</small>':'')+(sp.label?`<small class="tSpineLabel">計画：${esc(sp.label)}</small>`:'')}
