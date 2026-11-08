@@ -347,3 +347,9 @@ span.tRowMain{border-style:dashed}
 .tSpineNone{opacity:.55}
 .tSpineMemo{margin:.4em 0;font-size:.9em}
 .tSpineSkip,.tSpineShop{font-size:.85em;white-space:nowrap}
+.tSpineRecipe{font-size:.85em;white-space:nowrap}
+.recipeView h3{margin:1em 0 .3em;font-size:1em}
+.recipeImg{display:block;width:100%;max-width:420px;height:auto;border-radius:12px;margin:.5em 0}
+.recipeIng{list-style:none;padding:0;margin:0}
+.recipeIng li{display:flex;justify-content:space-between;gap:1em;padding:.25em 0;border-bottom:1px solid rgba(0,0,0,.08)}
+.recipeSteps{padding-left:1.4em;margin:0}
