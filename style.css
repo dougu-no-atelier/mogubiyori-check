@@ -331,7 +331,7 @@ span.tRowMain{border-style:dashed}
 .tAddPickHead .linkButton{min-height:40px;padding:4px 2px;font-size:13px}
 .tAddHead{margin:6px 0 4px;font-size:12px;color:var(--muted)}
 .tAddList{display:flex;flex-wrap:wrap;gap:6px}
-.tAddItem{display:inline-flex;align-items:baseline;gap:6px;min-height:40px;padding:4px 12px;border-radius:999px;font-size:14px;white-space:normal;text-align:left;min-width:0;overflow-wrap:anywhere}
+.tAddItem{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:3px 11px;border-radius:999px;font-size:13px;white-space:nowrap;text-align:left}
 .tAddItem small{flex:none;font-size:11px;color:var(--muted)}
 .tAddStock{border-color:#c9d3a0;background:#f6f8e8}
 .tUpSlot .tAddPick{margin-left:2.6em}
@@ -365,8 +365,10 @@ span.tRowMain{border-style:dashed}
 .recipeEntry>h3{margin:0 0 6px;font-size:16px}
 .stockDelete{color:#792d1c}
 /* 食材ピッカー: 一覧はスクロール、書く欄は右側の列 */
-.tAddPickMain{display:flex;gap:10px;align-items:flex-start}
-.tAddScroll{flex:1;min-width:0;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch}
-.tAddCustom{width:138px;flex:none}
-.tAddCustom input{width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;font:inherit;background:var(--white);color:inherit}
-.tAddCustom button{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
+/* 食材ピッカー: ストック・食材とも1行の横スクロール、下に書く欄 */
+.tAddStrip{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:2px 1px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tAddStrip::-webkit-scrollbar{display:none}
+.tAddCustom{margin-top:8px}
+.tAddCustomRow{display:flex;gap:8px}
+.tAddCustomRow input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
+.tAddCustomRow button{flex:none;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
