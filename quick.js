@@ -61,7 +61,7 @@ function quickTodayPage(){
  const head=`<header class="qHead tHead"><h1>${view.date===jstDate()?'今日':esc(dateLabel(view.date))}</h1></header>${datebar()}`;
  if(tNeedsStock(view.date))return `${head}${todayWelcomeCard()}${view.todayFree?qFreeComposer():''}${todayMoreMarkup()}`;
  const day=tSuggestFor(view.date);
- return `${head}${tSuggestLead(view.date,day)}${tSetupLine()}${todayMenuBlock(day)}${view.todayFree?qFreeComposer():''}${tStepLine(view.date)}${todayStockBlock()}${todayMoreMarkup()}`;
+ return `${head}${tSuggestLead(view.date,day)}${tSetupLine()}${todayMenuBlock(day)}${recipesEntryMarkup()}${view.todayFree?qFreeComposer():''}${tStepLine(view.date)}${todayStockBlock()}${todayMoreMarkup()}`;
 }
 // ===== 1.3.0: おすすめは食事の枠の中に／カードの上で直す／一週間のおすすめの出す・出さない =====
 // おすすめ由来の献立（使い切り提案から入れたまま・未記録）。カードと一週間の行に小さな「おすすめ」印を付ける。
@@ -468,6 +468,19 @@ function spineRecipeOpen(k){
  openDialog(`<section class="recipeView" aria-label="${esc(k)}の作り方"><h2>${esc(k)}</h2>${img?`<img class="recipeImg" src="${esc(img)}" alt="${esc(k)}">`:''}${r.makes?`<p class="small muted">${esc(r.makes)}</p>`:''}${ing?`<h3>材料</h3><ul class="recipeIng">${ing}</ul>`:''}${steps?`<h3>手順</h3><ol class="recipeSteps">${steps}</ol>`:''}${r.keep?`<h3>保存の目安</h3><p>${esc(r.keep)}</p>`:''}<p class="small muted">量は目安です。1食の量は、ほかの料理と合わせて、食べる様子を見ながら調整してください。冷凍したものは、食べる前にもう一度しっかり加熱してください</p></section>`);
  // 写真が読めない（オフラインなど）ときは写真だけ外す。CSP でインライン onerror は使えないのでここで付ける。
  try{const im=$('#dialogBody').querySelector('.recipeImg');if(im)im.addEventListener('error',()=>im.remove(),{once:true})}catch{}}
+// ===== 1.8.4: 作り方の一覧（写真つき）。計画に出た料理の行からだけでなく、いつでも全品を見られるようにする =====
+function recipesEntryMarkup(){return `<section class="tBlock recipeEntry"><h2>作り方</h2><p class="small muted">中期・後期の料理と、素材の下ごしらえを、写真つきで一覧できます。</p><button class="full" data-action="recipes">作り方の一覧を見る</button></section>`}
+function recipesPage(){
+ if(typeof RECIPES!=='object'||!RECIPES)return head('','作り方','')+'<button class="linkButton qLegacyBack" data-nav="today">‹ 今日へ戻る</button><p class="small muted">作り方のデータがありません。</p>';
+ const PREP=['りんご','ブロッコリー','インゲン','にんじんスティック','ぶどう','さくらんぼ','ブルーベリー'];
+ const dishSet=days=>{const s=[];for(const day of days)for(const meal of day)for(const n of meal)if(typeof n==='string'&&!PREP.includes(n)&&spineRecipe(n)&&!s.includes(n))s.push(n);return s};
+ const chuki=dishSet(SPINE_CHUKI),kouki=dishSet(SPINE_KOUKI).filter(n=>!chuki.includes(n));
+ const prep=PREP.filter(n=>spineRecipe(n));
+ const card=n=>{const r=RECIPES[n],img=/^img\/recipes\/[\w-]+\.(webp|png|jpg)$/.test(r.img||'')?r.img:'';return `<button class="recipeCard" data-t="spine-recipe" data-dish="${esc(n)}" aria-label="${esc(n)}の作り方を見る">${img?`<img class="recipeThumb" src="${esc(img)}" alt="" loading="lazy">`:''}<span>${esc(n)}</span></button>`};
+ const sec=(t,list)=>list.length?`<section class="recipeGroup"><h3>${t}（${list.length}品）</h3><div class="recipeGrid">${list.map(card).join('')}</div></section>`:'';
+ return head('','作り方','料理を選ぶと、写真・材料・手順が出ます')+'<button class="linkButton qLegacyBack" data-nav="today">‹ 今日へ戻る</button>'+sec('中期の料理',chuki)+sec('後期の料理',kouki)+sec('素材の下ごしらえ',prep)+'<p class="small muted screenFoot">量は目安です。食べる様子を見ながら調整してください。</p>'}
+// 一覧の写真が読めない（オフラインなど）ときは、その写真だけ外す（CSP でインライン onerror は使えないため、捕捉フェーズで受ける）。
+document.addEventListener('error',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('recipeThumb'))t.remove()},true);
 function spineBody(d,slot,r,sp){
  const rows=sp.rows.map(x=>x.kind==='none'&&!(r&&tRecordedItem(r,x.name))?spineNoneRow(x):tRowMarkup(d,slot,x.name,r,false,false,x)),shown=new Set(sp.rows.map(x=>x.name)),extra=r?tMealNames(null,r).filter(n=>!shown.has(n)):[];
  const html=rows.join('')+extra.map(n=>tRowMarkup(d,slot,n,r)).join('');

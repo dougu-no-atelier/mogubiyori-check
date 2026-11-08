@@ -353,3 +353,11 @@ span.tRowMain{border-style:dashed}
 .recipeIng{list-style:none;padding:0;margin:0}
 .recipeIng li{display:flex;justify-content:space-between;gap:1em;padding:.25em 0;border-bottom:1px solid rgba(0,0,0,.08)}
 .recipeSteps{padding-left:1.4em;margin:0}
+
+/* 1.8.4: 作り方の一覧 */
+.recipeGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.recipeCard{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--white);font:inherit;text-align:left;cursor:pointer}
+.recipeThumb{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;background:#f3ead9}
+.recipeCard span{font-weight:600;font-size:14px;line-height:1.4}
+.recipeGroup{margin:18px 0}
+.recipeGroup>h3{margin:0 0 10px;font-size:16px}
