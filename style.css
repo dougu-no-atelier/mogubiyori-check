@@ -325,7 +325,9 @@ span.tRowMain{border-style:dashed}
 .tRemove{flex:none;width:40px;min-height:40px;padding:0;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:18px;line-height:1;text-align:center;justify-content:center}
 .tChip{display:inline-flex;align-items:center;gap:0;margin:2px 6px 2px 0;padding:0 0 0 12px;border:1px solid var(--line);border-radius:999px;background:#fffaf2;color:var(--ink);max-width:100%}
 .tChip .tRemove{width:36px;min-height:36px;border:0}
-.tAddPick{flex-basis:100%;margin:6px 0 4px;padding:8px 12px 12px;border:1px solid var(--line);border-radius:14px;background:#fffaf2;min-width:0}
+/* 食材ピッカーは画面に浮かぶカードとして出す */
+.tAddPick{position:fixed;left:10px;right:10px;bottom:76px;z-index:80;margin:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:16px;background:#fffaf2;box-shadow:0 14px 36px rgba(90,70,40,.22);max-height:52dvh;overflow-y:auto;animation:tPickIn .18s ease-out}
+@keyframes tPickIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 .tAddPickHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tAddPickHead b{font-size:14px}
 .tAddPickHead .linkButton{min-height:40px;padding:4px 2px;font-size:13px}
