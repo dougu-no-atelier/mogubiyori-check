@@ -382,7 +382,7 @@ const KOUKI_11F=[
 ];
 const SPINE_KOUKI=[...KOUKI_9A,...KOUKI_9B,...KOUKI_9A,...KOUKI_9B,...KOUKI_10C,...KOUKI_10D,...KOUKI_10C,...KOUKI_10D,...KOUKI_11E,...KOUKI_11F,...KOUKI_11E,...KOUKI_11F];
 // 差し替え用の料理の分類（47品＋かぼちゃペースト・さつまいもポタージュ＋素材品4つ）。ヨーグルト＝dairy は既存の分類、きな粉は分類なし（書かない）。
-const KOUKI_GROUP={'5倍がゆ':'grains','軟飯':'grains','鮭とひじきの炊き込みがゆ':'grains','食パンスティック':'grains','野菜たっぷりみそ汁':'vegfruit','鶏肉じゃが':'meat','にんじんのポタージュ':'vegfruit','りんごとさつまいものおやき':'grains','たらのだし煮':'fish','豆腐でふわふわパンケーキ':'grains','豆腐ハンバーグ':'tofu','じゃがいもとほうれん草のおやき':'grains','ミートソース':'meat','ツナじゃがチーズおやき':'grains','ツナとにんじんの炊き込みがゆ':'grains','マカロニきな粉':'grains','ふわふわ蒸しパン':'grains','さつまいもきな粉おやき':'grains','赤ちゃんミートボール':'meat','野菜スープ':'vegfruit','さつまいもがゆ':'grains','じゃがいもチーズおやき':'grains','赤ちゃんハヤシソース':'meat','あじと小松菜のうま煮':'fish','具だくさん豚汁':'vegfruit','ほうれん草パンケーキ':'grains','たらとじゃがいものトマト煮':'fish','コロコロ大根にんじん煮':'vegfruit','白菜とツナのクリームうどん':'grains','かぼちゃおやき':'grains','かぼちゃポタージュ':'vegfruit','ひじきたっぷり炊き込みがゆ':'grains','なすの肉みそ':'meat','のり塩里いも':'vegfruit','鮭とほうれん草のクリームマカロニパスタ':'grains','コーンポタージュ':'vegfruit','ひじき煮の軟飯':'grains','野菜豆乳みそスープ':'vegfruit','ツナ入りお好み焼き':'grains','にんじんしりしり':'vegfruit','鮭としめじの炊き込み軟飯':'grains','野菜つくねうどん':'grains','いももち':'grains','さつまいもの甘煮':'vegfruit','しらすおかか軟飯':'grains','のり塩軟飯':'grains','鶏みそつくね':'meat','かぼちゃペースト':'vegfruit','さつまいもポタージュ':'vegfruit','りんご':'vegfruit','ブロッコリー':'vegfruit','インゲン':'vegfruit','にんじんスティック':'vegfruit'};
+const KOUKI_GROUP={'5倍がゆ':'grains','軟飯':'grains','鮭とひじきの炊き込みがゆ':'grains','食パンスティック':'grains','野菜たっぷりみそ汁':'vegfruit','鶏肉じゃが':'meat','にんじんのポタージュ':'vegfruit','りんごとさつまいものおやき':'grains','たらのだし煮':'fish','豆腐でふわふわパンケーキ':'grains','豆腐ハンバーグ':'tofu','じゃがいもとほうれん草のおやき':'grains','ミートソース':'meat','ツナじゃがチーズおやき':'grains','ツナとにんじんの炊き込みがゆ':'grains','マカロニきな粉':'grains','ふわふわ蒸しパン':'grains','さつまいもきな粉おやき':'grains','赤ちゃんミートボール':'meat','野菜スープ':'vegfruit','さつまいもがゆ':'grains','じゃがいもチーズおやき':'grains','赤ちゃんハヤシソース':'meat','あじと小松菜のうま煮':'fish','具だくさん豚汁':'meat','ほうれん草パンケーキ':'grains','たらとじゃがいものトマト煮':'fish','コロコロ大根にんじん煮':'vegfruit','白菜とツナのクリームうどん':'grains','かぼちゃおやき':'grains','かぼちゃポタージュ':'vegfruit','ひじきたっぷり炊き込みがゆ':'grains','なすの肉みそ':'meat','のり塩里いも':'vegfruit','鮭とほうれん草のクリームマカロニパスタ':'grains','コーンポタージュ':'vegfruit','ひじき煮の軟飯':'grains','野菜豆乳みそスープ':'vegfruit','ツナ入りお好み焼き':'grains','にんじんしりしり':'vegfruit','鮭としめじの炊き込み軟飯':'grains','野菜つくねうどん':'grains','いももち':'grains','さつまいもの甘煮':'vegfruit','しらすおかか軟飯':'grains','のり塩軟飯':'grains','鶏みそつくね':'meat','かぼちゃペースト':'vegfruit','さつまいもポタージュ':'vegfruit','りんご':'vegfruit','ブロッコリー':'vegfruit','インゲン':'vegfruit','にんじんスティック':'vegfruit'};
 // 表に無い名前は中期の分類→既存の分類の順で引く（中期の料理名のストックも後期で分類される）。
 const koukiGroupMap=new Map(Object.entries(KOUKI_GROUP).map(([k,v])=>[spineNormC(k),v]));
 function koukiGroup(n){return koukiGroupMap.has(n)?koukiGroupMap.get(n):chukiGroup(n)}
@@ -410,18 +410,17 @@ function spineChukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)ret
 // 後期の位置＝E−112（1〜84）。範囲外は null。relax（時期のみ選択・開始日なしでも記録があれば進む）は中期と同じ。
 function spineKoukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)return null;const n=e-SPINE.length-SPINE_CHUKI.length;return n>=1&&n<=SPINE_KOUKI.length?n:null}
 function spineActiveDay(d){if(d!==jstDate()||!spineOn())return null;const st=qStageKey();return st==='初期'?spineDay(d):st==='中期'?spineChukiDay(d):st==='後期'?spineKoukiDay(d):null}
-// 背骨が受け持つ枠の番号。初期は使用枠の1番目だけ、中期は1番目（1回目）と2番目（2回目）。受け持たない枠は -1。
+// 背骨が受け持つ枠の番号。初期は使用枠の1番目だけ、中期は1・2番目、後期は1〜3番目。受け持たない枠は -1。
 function spineSlotIdx(d,slot){const i=tSlots(d).indexOf(slot),st=qStageKey();return i>=0&&i<(st==='後期'?3:st==='中期'?2:1)?i:-1}
-// 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
 // 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
 function spineOwned(p){return !p||tIsHusk(p)||Boolean(p.quickCreated)||p.note===qSuggestNote}
 function spineHolds(d,slot,p){return Boolean(spineActiveDay(d))&&spineSlotIdx(d,slot)>=0&&spineOwned(p)}// 計画日の食材を順に解決する。a=ストック一致 b=同じ分類で差し替え（食べたことがある＞賞味目安が近い順） c=ストックなし。
 // plan＝[名前,量ラベル|null] の配列。o＝時期ごとの正規化・分類・初登場日（既定は初期）。中期の 'お好みの果物' は kind:'fruit' で解決する。
-// shared（中期だけ渡る）＝その日の食事をまたいだストックの使用数（batchId→個数）。残り1個が2食に重なるのを防ぐ。
+// shared（中期・後期で渡る）＝その日の食事をまたいだストックの使用数（batchId→個数）。残り1個が2食に重なるのを防ぐ。
 function spineRows(d,day,plan=SPINE[day-1],o=SPINE_OPT,shared=null){
  const {norm,group}=o,skips=spineSkips(),eaten=qEatenFoods(),stock=stockSorted(state().batches.filter(b=>b.quantity>0)),planNorms=new Set(plan.map(([n])=>norm(n))),used=new Set(),rows=[];
  const namesOf=b=>o.fruit&&b.name?[b.name,...qStockNames(b).filter(x=>x!==b.name)]:qStockNames(b);
- const eatenN=o.fruit?new Set([...eaten].map(x=>norm(x))):null,wasEaten=x=>eaten.has(x)||(eatenN!==null&&eatenN.has(norm(x)));
+ const eatenN=o.fruit?new Set([...eaten.keys()].map(x=>norm(x))):null,wasEaten=x=>eaten.has(x)||(eatenN!==null&&eatenN.has(norm(x)));
  const hasFruit=o.fruit&&plan.some(([n])=>n===CHUKI_FRUIT);
  const left=b=>!shared||(shared.get(b.id)||0)<b.quantity,use1=b=>{if(shared)shared.set(b.id,(shared.get(b.id)||0)+1)};
  const amt=b=>{const sp=b&&stockPortion(b);return sp&&sp.unit!=='whole'?portionAmountLabel(sp.unit,sp.amount,100):''};
@@ -450,7 +449,7 @@ function spineMeal(d,slot,p){
  if(!spineHolds(d,slot,p))return null;
  const day=spineActiveDay(d),i=spineSlotIdx(d,slot);
  const st=qStageKey(),bk=st==='中期'?[SPINE_CHUKI,CHUKI_OPT]:st==='後期'?[SPINE_KOUKI,KOUKI_OPT]:null;
- if(bk){const shared=new Map();let rows=null,memo='';for(let k=0;k<=i;k++){const r=spineRows(d,day,bk[0][day-1][k].map(n=>[n,null]),{...bk[1],carry:k===0},shared);if(k===i){rows=r;if(k===0)memo=spineMemo(d,r)}}return {day,rows,memo}}
+ if(bk){const shared=new Map(),slots2=tSlots(d);let rows=null,memo='';for(let k=0;k<=i;k++){const pk=k<i?meals(d).find(x=>x.slot===slots2[k]):p;if(k<i&&pk&&!spineOwned(pk)){for(const u of pk.uses||[])shared.set(u.batchId,(shared.get(u.batchId)||0)+(Number(u.quantity)||1));continue}const r=spineRows(d,day,bk[0][day-1][k].map(n=>[n,null]),{...bk[1],carry:k===0},shared);if(k===i){rows=r;if(k===0)memo=spineMemo(d,r)}}return {day,rows,memo}}
  const rows=spineRows(d,day);return {day,rows,memo:spineMemo(d,rows)}}
 function spineRowNotes(sp){return (sp.kind==='swap'?`<span class="tSpineSwap">差し替え</span><small class="tSpineFrom">（計画は${esc(sp.plan)}）</small>`:'')+(sp.kind==='fruit'?'<small class="tSpineFrom">（お好みの果物）</small>':'')+(sp.label?`<small class="tSpineLabel">計画：${esc(sp.label)}</small>`:'')}
 function spineSkipButton(sp){return `<button class="linkButton tSpineSkip" data-t="spine-skip" data-plan="${esc(sp.plan)}" data-name="${esc(sp.name)}" aria-label="${esc(sp.name)}を今日は見送る" data-edit>今日は見送る</button>`}
@@ -458,12 +457,12 @@ function spineNoneRow(x){return `<div class="tRow tSpineNone"><span class="tRowM
 // ===== 1.7.0: 作り方ビュー =====
 // RECIPES は recipes.js（データだけ）。無い・その料理が無いときは何も出さない。
 function spineRecipe(k){return typeof RECIPES==='object'&&RECIPES&&Object.prototype.hasOwnProperty.call(RECIPES,k)&&RECIPES[k]&&typeof RECIPES[k]==='object'?RECIPES[k]:null}
-function spineRecipeButton(sp){const k=sp.kind==='match'||sp.kind==='none'?sp.plan:sp.kind==='swap'?sp.name:'';return k&&spineRecipe(k)?`<button class="linkButton tSpineRecipe" data-t="spine-recipe" data-dish="${esc(k)}" aria-label="${esc(k)}の作り方を見る">作り方</button>`:''}
+function spineRecipeButton(sp){const k=sp.kind==='match'||sp.kind==='none'?sp.plan:sp.kind==='swap'||sp.kind==='fruit'?sp.name:'';return k&&spineRecipe(k)?`<button class="linkButton tSpineRecipe" data-t="spine-recipe" data-dish="${esc(k)}" aria-label="${esc(k)}の作り方を見る">作り方</button>`:''}
 function spineRecipeOpen(k){
  const r=spineRecipe(k);if(!r)return;
  const list=a=>Array.isArray(a)?a:[],img=/^img\/recipes\/[\w-]+\.(webp|png|jpg)$/.test(r.img||'')?r.img:'';
  const ing=list(r.ingredients).filter(Array.isArray).map(([n,q])=>`<li><span>${esc(n)}</span>${q?`<b>${esc(q)}</b>`:''}</li>`).join(''),steps=list(r.steps).map(s=>`<li>${esc(s)}</li>`).join('');
- openDialog(`<section class="recipeView" aria-label="${esc(k)}の作り方"><h2>${esc(k)}</h2>${img?`<img class="recipeImg" src="${esc(img)}" alt="${esc(k)}">`:''}${r.makes?`<p class="small muted">${esc(r.makes)}</p>`:''}${ing?`<h3>材料</h3><ul class="recipeIng">${ing}</ul>`:''}${steps?`<h3>手順</h3><ol class="recipeSteps">${steps}</ol>`:''}${r.keep?`<h3>保存の目安</h3><p>${esc(r.keep)}</p>`:''}<p class="small muted">量は目安です。1食の量は、ほかの料理と合わせて、食べる様子を見ながら調整してください</p></section>`);
+ openDialog(`<section class="recipeView" aria-label="${esc(k)}の作り方"><h2>${esc(k)}</h2>${img?`<img class="recipeImg" src="${esc(img)}" alt="${esc(k)}">`:''}${r.makes?`<p class="small muted">${esc(r.makes)}</p>`:''}${ing?`<h3>材料</h3><ul class="recipeIng">${ing}</ul>`:''}${steps?`<h3>手順</h3><ol class="recipeSteps">${steps}</ol>`:''}${r.keep?`<h3>保存の目安</h3><p>${esc(r.keep)}</p>`:''}<p class="small muted">量は目安です。1食の量は、ほかの料理と合わせて、食べる様子を見ながら調整してください。冷凍したものは、食べる前にもう一度しっかり加熱してください</p></section>`);
  // 写真が読めない（オフラインなど）ときは写真だけ外す。CSP でインライン onerror は使えないのでここで付ける。
  try{const im=$('#dialogBody').querySelector('.recipeImg');if(im)im.addEventListener('error',()=>im.remove(),{once:true})}catch{}}
 function spineBody(d,slot,r,sp){
