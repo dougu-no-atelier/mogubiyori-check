@@ -323,6 +323,73 @@ let chukiFirstMap=null;
 function chukiFirstDay(name){if(!chukiFirstMap){chukiFirstMap=new Map();SPINE_CHUKI.forEach((day,i)=>{for(const meal of day)for(const n of meal)if(!chukiFirstMap.has(n))chukiFirstMap.set(n,i+1)})}return chukiFirstMap.get(name)??null}
 const SPINE_OPT={norm:spineNorm,group:spineGroup,first:spineFirstDay};
 const CHUKI_OPT={norm:spineNormC,group:chukiGroup,first:chukiFirstDay,fruit:true};
+// ===== 1.8.0: 本の進め方（後期）=====
+// 後期＝9〜11カ月目の6パターン（週ローテーション）。各日は [1回目,2回目,3回目]。転記（hidden_files/utamaru-kouki-calendars.md）の規則：
+// 「・」と「＋」は別要素、★と →P◯◯ は落とす、「（豆腐入り）」「（または軟飯）」は外す。
+const KOUKI_9A=[
+ [['鮭とひじきの炊き込みがゆ','かぼちゃペースト','インゲン','りんご'],['食パンスティック','野菜たっぷりみそ汁'],['5倍がゆ','鶏肉じゃが','にんじんのポタージュ','りんごとさつまいものおやき','ブロッコリー']],
+ [['鮭とひじきの炊き込みがゆ','りんごとさつまいものおやき','野菜たっぷりみそ汁'],['豆腐でふわふわパンケーキ','にんじんのポタージュ','ブロッコリー'],['5倍がゆ','鶏肉じゃが','かぼちゃペースト','きな粉']],
+ [['5倍がゆ','たらのだし煮','にんじんのポタージュ','りんごとさつまいものおやき','インゲン'],['5倍がゆ','鶏肉じゃが','野菜たっぷりみそ汁'],['鮭とひじきの炊き込みがゆ','かぼちゃペースト','インゲン','りんご']],
+ [['5倍がゆ','たらのだし煮','野菜たっぷりみそ汁','りんご'],['豆腐でふわふわパンケーキ','にんじんのポタージュ','ブロッコリー'],['鮭とひじきの炊き込みがゆ','野菜たっぷりみそ汁','りんごとさつまいものおやき']],
+ [['食パンスティック','鶏肉じゃが','かぼちゃペースト','きな粉'],['鮭とひじきの炊き込みがゆ','りんごとさつまいものおやき'],['5倍がゆ','鶏肉じゃが','野菜たっぷりみそ汁','りんご']],
+ [['鮭とひじきの炊き込みがゆ','野菜たっぷりみそ汁','りんご'],['豆腐でふわふわパンケーキ','にんじんのポタージュ','ブロッコリー'],['5倍がゆ','たらのだし煮','りんごとさつまいものおやき','インゲン']],
+ [['食パンスティック','たらのだし煮','りんごとさつまいものおやき','ブロッコリー'],['5倍がゆ','鶏肉じゃが','かぼちゃペースト','きな粉'],['5倍がゆ','たらのだし煮','野菜たっぷりみそ汁','りんご']]
+];
+const KOUKI_9B=[
+ [['5倍がゆ','豆腐ハンバーグ','じゃがいもとほうれん草のおやき'],['5倍がゆ','ミートソース','ツナじゃがチーズおやき','ブロッコリー'],['ツナとにんじんの炊き込みがゆ','じゃがいもとほうれん草のおやき','野菜たっぷりみそ汁']],
+ [['マカロニきな粉','じゃがいもとほうれん草のおやき','にんじんスティック'],['ツナとにんじんの炊き込みがゆ','野菜たっぷりみそ汁'],['5倍がゆ','豆腐ハンバーグ','にんじんのポタージュ','ブロッコリー']],
+ [['ツナとにんじんの炊き込みがゆ','じゃがいもとほうれん草のおやき','お好みの果物'],['マカロニきな粉','ツナじゃがチーズおやき','野菜たっぷりみそ汁'],['5倍がゆ','ミートソース','じゃがいもとほうれん草のおやき','野菜たっぷりみそ汁']],
+ [['ツナとにんじんの炊き込みがゆ','じゃがいもとほうれん草のおやき','お好みの果物'],['5倍がゆ','ミートソース','にんじんのポタージュ','ブロッコリー'],['5倍がゆ','豆腐ハンバーグ','野菜たっぷりみそ汁','にんじんスティック','ブロッコリー']],
+ [['マカロニきな粉','ツナじゃがチーズおやき','にんじんスティック','ブロッコリー','お好みの果物'],['ツナとにんじんの炊き込みがゆ','野菜たっぷりみそ汁'],['5倍がゆ','ミートソース','ツナじゃがチーズおやき','にんじんのポタージュ']],
+ [['ツナとにんじんの炊き込みがゆ','じゃがいもとほうれん草のおやき','お好みの果物'],['5倍がゆ','ミートソース','にんじんのポタージュ','ブロッコリー'],['5倍がゆ','豆腐ハンバーグ','野菜たっぷりみそ汁','にんじんスティック','ブロッコリー']],
+ [['マカロニきな粉','豆腐ハンバーグ','野菜たっぷりみそ汁'],['ツナとにんじんの炊き込みがゆ','じゃがいもとほうれん草のおやき'],['5倍がゆ','ミートソース','にんじんのポタージュ','ブロッコリー']]
+];
+const KOUKI_10C=[
+ [['ふわふわ蒸しパン','さつまいもきな粉おやき','にんじんスティック'],['5倍がゆ','赤ちゃんミートボール','野菜スープ'],['さつまいもがゆ','じゃがいもチーズおやき','ブロッコリー','お好みの果物']],
+ [['5倍がゆ','赤ちゃんハヤシソース','じゃがいもチーズおやき','にんじんスティック','ブロッコリー'],['さつまいもがゆ','赤ちゃんミートボール','にんじんスティック','ブロッコリー'],['ふわふわ蒸しパン','さつまいもきな粉おやき','野菜スープ']],
+ [['5倍がゆ','赤ちゃんハヤシソース','さつまいもきな粉おやき','にんじんスティック'],['さつまいもがゆ','あじと小松菜のうま煮','野菜スープ'],['5倍がゆ','赤ちゃんミートボール','じゃがいもチーズおやき','お好みの果物']],
+ [['5倍がゆ','あじと小松菜のうま煮','さつまいもきな粉おやき','野菜スープ'],['ふわふわ蒸しパン','さつまいもきな粉おやき','野菜スープ'],['5倍がゆ','赤ちゃんミートボール','じゃがいもチーズおやき','ブロッコリー']],
+ [['5倍がゆ','赤ちゃんミートボール','野菜スープ','お好みの果物'],['さつまいもがゆ','あじと小松菜のうま煮','お好みの果物'],['5倍がゆ','赤ちゃんハヤシソース','じゃがいもチーズおやき','ブロッコリー']],
+ [['5倍がゆ','あじと小松菜のうま煮','野菜スープ','お好みの果物'],['ふわふわ蒸しパン','さつまいもきな粉おやき','にんじんスティック'],['さつまいもがゆ','赤ちゃんミートボール','ブロッコリー','お好みの果物']],
+ [['5倍がゆ','赤ちゃんハヤシソース','さつまいもきな粉おやき','お好みの果物'],['5倍がゆ','赤ちゃんミートボール','野菜スープ','お好みの果物'],['5倍がゆ','あじと小松菜のうま煮','じゃがいもチーズおやき','お好みの果物']]
+];
+const KOUKI_10D=[
+ [['5倍がゆ','具だくさん豚汁','ヨーグルト','お好みの果物'],['ほうれん草パンケーキ','たらとじゃがいものトマト煮','コロコロ大根にんじん煮'],['白菜とツナのクリームうどん','かぼちゃおやき','お好みの果物','きな粉']],
+ [['ほうれん草パンケーキ','かぼちゃポタージュ','お好みの果物','きな粉'],['ひじきたっぷり炊き込みがゆ','具だくさん豚汁','ヨーグルト','きな粉'],['白菜とツナのクリームうどん','かぼちゃおやき','にんじんスティック','ブロッコリー']],
+ [['ひじきたっぷり炊き込みがゆ','コロコロ大根にんじん煮','ヨーグルト','お好みの果物'],['5倍がゆ','具だくさん豚汁','かぼちゃおやき'],['白菜とツナのクリームうどん','たらとじゃがいものトマト煮','お好みの果物','きな粉']],
+ [['ひじきたっぷり炊き込みがゆ','コロコロ大根にんじん煮','かぼちゃポタージュ'],['ほうれん草パンケーキ','たらとじゃがいものトマト煮','お好みの果物','きな粉'],['5倍がゆ','かぼちゃおやき','具だくさん豚汁']],
+ [['ほうれん草パンケーキ','具だくさん豚汁','お好みの果物','きな粉'],['白菜とツナのクリームうどん','かぼちゃおやき','コロコロ大根にんじん煮'],['ひじきたっぷり炊き込みがゆ','かぼちゃポタージュ','にんじんスティック','ブロッコリー']],
+ [['ほうれん草パンケーキ','具だくさん豚汁','お好みの果物','きな粉'],['ひじきたっぷり炊き込みがゆ','かぼちゃポタージュ','にんじんスティック','ブロッコリー'],['白菜とツナのクリームうどん','コロコロ大根にんじん煮','お好みの果物']],
+ [['5倍がゆ','たらとじゃがいものトマト煮','コロコロ大根にんじん煮'],['ほうれん草パンケーキ','かぼちゃポタージュ','お好みの果物','きな粉'],['ひじきたっぷり炊き込みがゆ','かぼちゃおやき','具だくさん豚汁']]
+];
+const KOUKI_11E=[
+ [['軟飯','なすの肉みそ','のり塩里いも','お好みの果物'],['鮭とほうれん草のクリームマカロニパスタ','コーンポタージュ'],['ひじき煮の軟飯','野菜豆乳みそスープ','お好みの果物']],
+ [['ひじき煮の軟飯','のり塩里いも','野菜豆乳みそスープ'],['ツナ入りお好み焼き','にんじんしりしり','お好みの果物'],['鮭とほうれん草のクリームマカロニパスタ','コーンポタージュ','お好みの果物']],
+ [['軟飯','なすの肉みそ','野菜豆乳みそスープ','お好みの果物'],['ツナ入りお好み焼き','にんじんしりしり','お好みの果物'],['ひじき煮の軟飯','のり塩里いも','コーンポタージュ']],
+ [['ひじき煮の軟飯','にんじんしりしり','お好みの果物'],['軟飯','なすの肉みそ','のり塩里いも','野菜豆乳みそスープ'],['鮭とほうれん草のクリームマカロニパスタ','コーンポタージュ','お好みの果物']],
+ [['軟飯','なすの肉みそ','野菜豆乳みそスープ','お好みの果物'],['ツナ入りお好み焼き','コーンポタージュ'],['ひじき煮の軟飯','野菜豆乳みそスープ','のり塩里いも']],
+ [['鮭とほうれん草のクリームマカロニパスタ','コーンポタージュ'],['ひじき煮の軟飯','野菜豆乳みそスープ'],['軟飯','なすの肉みそ','のり塩里いも','にんじんしりしり']],
+ [['ひじき煮の軟飯','コーンポタージュ','にんじんしりしり'],['軟飯','なすの肉みそ','野菜豆乳みそスープ','お好みの果物'],['ツナ入りお好み焼き','コーンポタージュ','お好みの果物']]
+];
+const KOUKI_11F=[
+ [['鮭としめじの炊き込み軟飯','さつまいもポタージュ','ヨーグルト','お好みの果物'],['野菜つくねうどん','いももち','さつまいもの甘煮'],['しらすおかか軟飯','野菜たっぷりみそ汁','さつまいもの甘煮']],
+ [['しらすおかか軟飯','いももち','お好みの果物'],['鮭としめじの炊き込み軟飯','野菜たっぷりみそ汁'],['野菜つくねうどん','さつまいもの甘煮','ヨーグルト','お好みの果物']],
+ [['のり塩軟飯','鶏みそつくね','野菜たっぷりみそ汁'],['しらすおかか軟飯','さつまいもの甘煮','ヨーグルト','お好みの果物'],['鮭としめじの炊き込み軟飯','いももち','さつまいもポタージュ']],
+ [['しらすおかか軟飯','いももち','野菜たっぷりみそ汁'],['野菜つくねうどん','さつまいもの甘煮','ヨーグルト','お好みの果物'],['のり塩軟飯','鶏みそつくね','さつまいもポタージュ']],
+ [['鮭としめじの炊き込み軟飯','野菜たっぷりみそ汁','お好みの果物'],['のり塩軟飯','鶏みそつくね','さつまいもポタージュ'],['野菜つくねうどん','いももち','さつまいもの甘煮']],
+ [['のり塩軟飯','鶏みそつくね','野菜たっぷりみそ汁'],['しらすおかか軟飯','いももち','さつまいもポタージュ'],['鮭としめじの炊き込み軟飯','野菜たっぷりみそ汁','ヨーグルト','お好みの果物']],
+ [['鮭としめじの炊き込み軟飯','いももち','野菜たっぷりみそ汁'],['野菜つくねうどん','さつまいもの甘煮'],['しらすおかか軟飯','さつまいもポタージュ','お好みの果物']]
+];
+const SPINE_KOUKI=[...KOUKI_9A,...KOUKI_9B,...KOUKI_9A,...KOUKI_9B,...KOUKI_10C,...KOUKI_10D,...KOUKI_10C,...KOUKI_10D,...KOUKI_11E,...KOUKI_11F,...KOUKI_11E,...KOUKI_11F];
+// 差し替え用の料理の分類（47品＋かぼちゃペースト・さつまいもポタージュ＋素材品4つ）。ヨーグルト＝dairy は既存の分類、きな粉は分類なし（書かない）。
+const KOUKI_GROUP={'5倍がゆ':'grains','軟飯':'grains','鮭とひじきの炊き込みがゆ':'grains','食パンスティック':'grains','野菜たっぷりみそ汁':'vegfruit','鶏肉じゃが':'meat','にんじんのポタージュ':'vegfruit','りんごとさつまいものおやき':'grains','たらのだし煮':'fish','豆腐でふわふわパンケーキ':'grains','豆腐ハンバーグ':'tofu','じゃがいもとほうれん草のおやき':'grains','ミートソース':'meat','ツナじゃがチーズおやき':'grains','ツナとにんじんの炊き込みがゆ':'grains','マカロニきな粉':'grains','ふわふわ蒸しパン':'grains','さつまいもきな粉おやき':'grains','赤ちゃんミートボール':'meat','野菜スープ':'vegfruit','さつまいもがゆ':'grains','じゃがいもチーズおやき':'grains','赤ちゃんハヤシソース':'meat','あじと小松菜のうま煮':'fish','具だくさん豚汁':'vegfruit','ほうれん草パンケーキ':'grains','たらとじゃがいものトマト煮':'fish','コロコロ大根にんじん煮':'vegfruit','白菜とツナのクリームうどん':'grains','かぼちゃおやき':'grains','かぼちゃポタージュ':'vegfruit','ひじきたっぷり炊き込みがゆ':'grains','なすの肉みそ':'meat','のり塩里いも':'vegfruit','鮭とほうれん草のクリームマカロニパスタ':'grains','コーンポタージュ':'vegfruit','ひじき煮の軟飯':'grains','野菜豆乳みそスープ':'vegfruit','ツナ入りお好み焼き':'grains','にんじんしりしり':'vegfruit','鮭としめじの炊き込み軟飯':'grains','野菜つくねうどん':'grains','いももち':'grains','さつまいもの甘煮':'vegfruit','しらすおかか軟飯':'grains','のり塩軟飯':'grains','鶏みそつくね':'meat','かぼちゃペースト':'vegfruit','さつまいもポタージュ':'vegfruit','りんご':'vegfruit','ブロッコリー':'vegfruit','インゲン':'vegfruit','にんじんスティック':'vegfruit'};
+// 表に無い名前は中期の分類→既存の分類の順で引く（中期の料理名のストックも後期で分類される）。
+const koukiGroupMap=new Map(Object.entries(KOUKI_GROUP).map(([k,v])=>[spineNormC(k),v]));
+function koukiGroup(n){return koukiGroupMap.has(n)?koukiGroupMap.get(n):chukiGroup(n)}
+// 初登場日（日の位置）。SPINE_KOUKI から機械的に導く（初期・中期の初登場日とは別。後期の中での最初）。
+let koukiFirstMap=null;
+function koukiFirstDay(name){if(!koukiFirstMap){koukiFirstMap=new Map();SPINE_KOUKI.forEach((day,i)=>{for(const meal of day)for(const n of meal)if(!koukiFirstMap.has(n))koukiFirstMap.set(n,i+1)})}return koukiFirstMap.get(name)??null}
+const KOUKI_OPT={norm:spineNormC,group:koukiGroup,first:koukiFirstDay,fruit:true};
 let spineOffMem=false;
 function spineOn(){try{const v=localStorage.getItem(SPINE_ON_KEY);if(v!==null)return v!=='off'}catch{}return !spineOffMem}
 function spineSetOn(on){spineOffMem=!on;try{localStorage.setItem(SPINE_ON_KEY,on?'on':'off')}catch{}}
@@ -340,9 +407,11 @@ function spineElapsed(d,relax){
 function spineDay(d=jstDate()){const e=spineElapsed(d,false);return e===null||e>SPINE.length?null:e}
 // 中期の位置＝E−56（1〜56）。範囲外は null。
 function spineChukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)return null;const n=e-SPINE.length;return n>=1&&n<=SPINE_CHUKI.length?n:null}
-function spineActiveDay(d){if(d!==jstDate()||!spineOn())return null;const st=qStageKey();return st==='初期'?spineDay(d):st==='中期'?spineChukiDay(d):null}
+// 後期の位置＝E−112（1〜84）。範囲外は null。relax（時期のみ選択・開始日なしでも記録があれば進む）は中期と同じ。
+function spineKoukiDay(d=jstDate()){const e=spineElapsed(d,true);if(e===null)return null;const n=e-SPINE.length-SPINE_CHUKI.length;return n>=1&&n<=SPINE_KOUKI.length?n:null}
+function spineActiveDay(d){if(d!==jstDate()||!spineOn())return null;const st=qStageKey();return st==='初期'?spineDay(d):st==='中期'?spineChukiDay(d):st==='後期'?spineKoukiDay(d):null}
 // 背骨が受け持つ枠の番号。初期は使用枠の1番目だけ、中期は1番目（1回目）と2番目（2回目）。受け持たない枠は -1。
-function spineSlotIdx(d,slot){const i=tSlots(d).indexOf(slot);return i>=0&&i<(qStageKey()==='中期'?2:1)?i:-1}
+function spineSlotIdx(d,slot){const i=tSlots(d).indexOf(slot),st=qStageKey();return i>=0&&i<(st==='後期'?3:st==='中期'?2:1)?i:-1}
 // 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
 // 背骨が受け持つ枠か。献立が無い・空の枠・記録から作られた枠・自動のおすすめは対象。手で作った／直した献立は手動なので対象外。
 function spineOwned(p){return !p||tIsHusk(p)||Boolean(p.quickCreated)||p.note===qSuggestNote}
@@ -380,7 +449,8 @@ function spineMemo(d,rows){const y=plusDate(d,-1),eaten=qEatenFoods(),shown=new 
 function spineMeal(d,slot,p){
  if(!spineHolds(d,slot,p))return null;
  const day=spineActiveDay(d),i=spineSlotIdx(d,slot);
- if(qStageKey()==='中期'){const shared=new Map();let rows=null,memo='';for(let k=0;k<=i;k++){const r=spineRows(d,day,SPINE_CHUKI[day-1][k].map(n=>[n,null]),{...CHUKI_OPT,carry:k===0},shared);if(k===i){rows=r;if(k===0)memo=spineMemo(d,r)}}return {day,rows,memo}}
+ const st=qStageKey(),bk=st==='中期'?[SPINE_CHUKI,CHUKI_OPT]:st==='後期'?[SPINE_KOUKI,KOUKI_OPT]:null;
+ if(bk){const shared=new Map();let rows=null,memo='';for(let k=0;k<=i;k++){const r=spineRows(d,day,bk[0][day-1][k].map(n=>[n,null]),{...bk[1],carry:k===0},shared);if(k===i){rows=r;if(k===0)memo=spineMemo(d,r)}}return {day,rows,memo}}
  const rows=spineRows(d,day);return {day,rows,memo:spineMemo(d,rows)}}
 function spineRowNotes(sp){return (sp.kind==='swap'?`<span class="tSpineSwap">差し替え</span><small class="tSpineFrom">（計画は${esc(sp.plan)}）</small>`:'')+(sp.kind==='fruit'?'<small class="tSpineFrom">（お好みの果物）</small>':'')+(sp.label?`<small class="tSpineLabel">計画：${esc(sp.label)}</small>`:'')}
 function spineSkipButton(sp){return `<button class="linkButton tSpineSkip" data-t="spine-skip" data-plan="${esc(sp.plan)}" data-name="${esc(sp.name)}" aria-label="${esc(sp.name)}を今日は見送る" data-edit>今日は見送る</button>`}
@@ -402,7 +472,7 @@ function spineBody(d,slot,r,sp){
  return sp.memo+(html||'<p class="small muted tDraftEmpty">今日の計画はすべて見送りました。</p>')}
 function spineSkip(plan,name){const d=jstDate();if(view.date!==d||!plan||!name)return;const list=spineSkips().filter(s=>!(s.date===d&&s.plan===plan));list.push({name,plan,date:d});spineSkipsSave(list);showStatus(name+'は今日は見送りました。');render()}
 function spineCarry(plan,name,from){const d=jstDate(),list=spineSkips(),s=list.find(x=>x.plan===plan&&x.name===name&&x.date===from&&!x.added);if(!s)return;s.added=d;spineSkipsSave(list);render()}
-function spineSettingMarkup(){const on=spineOn();return `<p>本の進め方（初期・中期）：${on?'使う':'使わない'}<small>（初期と中期の時期だけ、今日のメニューを決まった順番で出します。食べた記録がついた日だけ進みます）</small> <button data-t="spine-toggle" aria-pressed="${on}">${on?'使わない':'使う'}</button></p>`}
+function spineSettingMarkup(){const on=spineOn();return `<p>本の進め方（初期・中期・後期）：${on?'使う':'使わない'}<small>（初期・中期・後期の時期だけ、今日のメニューを決まった順番で出します。食べた記録がついた日だけ進みます）</small> <button data-t="spine-toggle" aria-pressed="${on}">${on?'使わない':'使う'}</button></p>`}
 function tRowMarkup(d,slot,name,r,removable=false,editing=false,sp=null){const done=tRecordedItem(r,name),t=done?null:qOneTap(name);let sub=done?(done.intake==='not_eaten'?'食べなかった':'食べた・'+qAmount(done)):t.amount==null?'':(t.source==='previous'?'前回 ':'目安 ')+qAmount(t);if(!done&&t.amount==null){const sa=tStockUseAmount(meals(d).find(x=>x.slot===slot),name)||(sp?sp.stockAmt:'');if(sa)sub='ストック '+sa}return `<div class="tRow ${done?'done':''}"><button class="tRowMain" data-t="adjust" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}の量・様子を変える" data-edit><b>${esc(name)}</b>${qIsFirstFood(name)&&!done?'<span class="qFirstBadge">はじめて</span>':''}${sp&&!done?spineRowNotes(sp):''}<small>${esc(sub)}</small></button>${done?'<span class="tDone">記録済み</span>'+tRowBtnsMarkup(d,slot,name):editing?'':`<button class="tAte" data-t="ate" data-date="${d}" data-slot="${slot}" data-name="${esc(name)}" aria-label="${esc(name)}を食べたで記録" data-edit>食べた</button>`}${removable&&!done?tRemoveButton(d,slot,name):''}${sp&&sp.skippable&&!done?spineSkipButton(sp):''}${sp&&!done?spineRecipeButton(sp):''}</div>`}
 function tMealMarkup(d,slot,day){
  const p=meals(d).find(x=>x.slot===slot),r=p&&record(p),names=tMealNames(p,r),husk=tIsHusk(p),inline=tInlineEditable(p),dr=tPlanDraft(d,slot),sp=dr?null:spineMeal(d,slot,p);
