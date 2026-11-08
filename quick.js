@@ -401,7 +401,8 @@ function spineSkipsSave(list){const from=plusDate(jstDate(),-14),keep=list.filte
 function spineElapsed(d,relax){
  const info=qStartInfo(d);if(info.source==='period'?!relax:(info.source&&info.day<1))return null;
  const plans=new Map(state().plans.map(p=>[p.id,p])),days=new Set();
- for(const r of state().records){const p=plans.get(r.planId);if(!p||!qEatenNames(r).length)continue;const x=qRecordDay(r,p);if(validDay(x)&&x<d&&(!info.start||x>=info.start))days.add(x)}
+ // 1.8.3: 食材の確認が無い記録でも、食事全体の結果が「食べた／少し食べた」なら食べた日として数える（旧画面の結果ボタンなどで作られた記録が、日数に数えられなかった直し。食材ごとの既食判定は従来どおり変えない）。
+ for(const r of state().records){const p=plans.get(r.planId);if(!p)continue;if(!qEatenNames(r).length&&!['食べた','少し食べた'].includes(r.result))continue;const x=qRecordDay(r,p);if(validDay(x)&&x<d&&(!info.start||x>=info.start))days.add(x)}
  return days.size+1}
 // 初期の位置＝E（1〜56）。範囲外は null。
 function spineDay(d=jstDate()){const e=spineElapsed(d,false);return e===null||e>SPINE.length?null:e}
