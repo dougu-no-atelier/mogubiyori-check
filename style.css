@@ -361,3 +361,5 @@ span.tRowMain{border-style:dashed}
 .recipeCard span{font-weight:600;font-size:14px;line-height:1.4}
 .recipeGroup{margin:18px 0}
 .recipeGroup>h3{margin:0 0 10px;font-size:16px}
+.recipeEntry{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+.recipeEntry>h3{margin:0 0 6px;font-size:16px}

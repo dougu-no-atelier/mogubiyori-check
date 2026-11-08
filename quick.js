@@ -61,7 +61,7 @@ function quickTodayPage(){
  const head=`<header class="qHead tHead"><h1>${view.date===jstDate()?'今日':esc(dateLabel(view.date))}</h1></header>${datebar()}`;
  if(tNeedsStock(view.date))return `${head}${todayWelcomeCard()}${view.todayFree?qFreeComposer():''}${todayMoreMarkup()}`;
  const day=tSuggestFor(view.date);
- return `${head}${tSuggestLead(view.date,day)}${tSetupLine()}${todayMenuBlock(day)}${recipesEntryMarkup()}${view.todayFree?qFreeComposer():''}${tStepLine(view.date)}${todayStockBlock()}${todayMoreMarkup()}`;
+ return `${head}${tSuggestLead(view.date,day)}${tSetupLine()}${todayMenuBlock(day)}${view.todayFree?qFreeComposer():''}${tStepLine(view.date)}${todayStockBlock()}${todayMoreMarkup()}`;
 }
 // ===== 1.3.0: おすすめは食事の枠の中に／カードの上で直す／一週間のおすすめの出す・出さない =====
 // おすすめ由来の献立（使い切り提案から入れたまま・未記録）。カードと一週間の行に小さな「おすすめ」印を付ける。
@@ -469,7 +469,7 @@ function spineRecipeOpen(k){
  // 写真が読めない（オフラインなど）ときは写真だけ外す。CSP でインライン onerror は使えないのでここで付ける。
  try{const im=$('#dialogBody').querySelector('.recipeImg');if(im)im.addEventListener('error',()=>im.remove(),{once:true})}catch{}}
 // ===== 1.8.4: 作り方の一覧（写真つき）。計画に出た料理の行からだけでなく、いつでも全品を見られるようにする =====
-function recipesEntryMarkup(){return `<section class="tBlock recipeEntry"><h2>作り方</h2><p class="small muted">中期・後期の料理と、素材の下ごしらえを、写真つきで一覧できます。</p><button class="full" data-action="recipes">作り方の一覧を見る</button></section>`}
+function recipesEntryMarkup(){return `<div class="recipeEntry"><h3>作り方</h3><p class="small muted">中期・後期の料理と、素材の下ごしらえを、写真つきで一覧できます。</p><button class="full" data-action="recipes">作り方の一覧を見る</button></div>`}
 function recipesPage(){
  if(typeof RECIPES!=='object'||!RECIPES)return head('','作り方','')+'<button class="linkButton qLegacyBack" data-nav="today">‹ 今日へ戻る</button><p class="small muted">作り方のデータがありません。</p>';
  const PREP=['りんご','ブロッコリー','インゲン','にんじんスティック','ぶどう','さくらんぼ','ブルーベリー'];
@@ -602,7 +602,7 @@ function tUpcomingDay(d,s,on=true){
 // on=一週間のおすすめを出す（weekSuggest）。出さないときは提案（s）を使わず、実際の献立だけを出す。
 function todayMenuBlock(day=tSuggestFor(view.date)){
  const d=view.date,on=qWeekSuggestOn(),s=on?qSuggest():null,days=Array.from({length:6},(_,i)=>plusDate(jstDate(),i+1));
- return `<section class="tBlock tMenu" id="todayMenu" aria-labelledby="menuTitle"><h2 id="menuTitle">メニュー</h2>${tMealSlotsBar(d)}${tItemsBar()}${tWeekToggle()}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}<div id="todayMeals" class="tMenuToday"><div class="tMenuDayHead"><b>${esc(dateLabel(d))}</b>${d===jstDate()?'<span class="tMenuTodayMark">今日</span>':''}</div>${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}</div><div id="todayUpcoming" class="tMenuWeek"><ul class="tUpDays">${days.map(x=>tUpcomingDay(x,s,on)).join('')}</ul>${s&&s.unknown.length?`<p class="small muted tUpUnknown">主食・主菜・副菜が分からず、メニューに使っていないストック：${esc(s.unknown.join('・'))}（冷凍庫のカードの「含まれる食材を直す」で使えます）</p>`:''}${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</div></section>`;
+ return `<section class="tBlock tMenu" id="todayMenu" aria-labelledby="menuTitle"><h2 id="menuTitle">メニュー</h2>${tMealSlotsBar(d)}${tItemsBar()}${tWeekToggle()}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}<div id="todayMeals" class="tMenuToday"><div class="tMenuDayHead"><b>${esc(dateLabel(d))}</b>${d===jstDate()?'<span class="tMenuTodayMark">今日</span>':''}</div>${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}</div>${recipesEntryMarkup()}<div id="todayUpcoming" class="tMenuWeek"><ul class="tUpDays">${days.map(x=>tUpcomingDay(x,s,on)).join('')}</ul>${s&&s.unknown.length?`<p class="small muted tUpUnknown">主食・主菜・副菜が分からず、メニューに使っていないストック：${esc(s.unknown.join('・'))}（冷凍庫のカードの「含まれる食材を直す」で使えます）</p>`:''}${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</div></section>`;
 }
 // 期限が近いストック。冷凍庫から期限が近い順に最大3件、名前と「あと○日」だけ。押すとカードの詳細が開く。
 function todayStockBlock(){const list=stockSorted(state().batches.filter(b=>b.quantity>0&&stockExpiry(b))).slice(0,3);return `<section class="tBlock tStock" id="todayStock" aria-labelledby="todayStockTitle"><h2 id="todayStockTitle">目安が近いストック</h2>${list.length?list.map(b=>`<button class="tStockRow" data-action="stockDetail" data-id="${b.id}"><span>${esc(b.name)}</span>${stockBadge(b)}</button>`).join('')+'<p class="small muted">「あと○日」は作った日から7日の目安です。</p>':'<p class="small muted">目安が近いストックはありません。</p>'}</section>`}
