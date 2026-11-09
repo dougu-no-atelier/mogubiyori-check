@@ -329,11 +329,11 @@ span.tRowMain{border-style:dashed}
 /* 食材ピッカーは下からせり上がるシートとして出す（背面は薄く暗くする） */
 .tPickScrim{position:fixed;inset:0;z-index:79;background:rgba(74,60,35,.30);animation:tFadeIn .18s ease-out}
 @keyframes tFadeIn{from{opacity:0}to{opacity:1}}
-.tAddPick{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:8px 14px calc(30px + env(safe-area-inset-bottom));border-top:1px solid var(--line);border-radius:20px 20px 0 0;background:#fffaf2;box-shadow:0 -12px 32px rgba(90,70,40,.20);max-height:88dvh;overflow-y:auto;animation:tPickIn .2s ease-out}
+.tAddPick{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:8px 0 0;display:flex;flex-direction:column;border-top:1px solid var(--line);border-radius:20px 20px 0 0;background:#fffaf2;box-shadow:0 -12px 32px rgba(90,70,40,.20);max-height:88dvh;overflow:hidden;animation:tPickIn .2s ease-out}
 .tAddPick::before{content:'';display:block;width:38px;height:4px;border-radius:2px;background:#d9d0bf;margin:0 auto 8px}
-.tAddPick::after{content:'';position:fixed;left:0;right:0;bottom:0;height:26px;background:linear-gradient(rgba(255,250,242,0),#fffaf2 88%);pointer-events:none}
+.tAddPick::after{content:'';position:absolute;left:0;right:0;bottom:0;height:26px;z-index:4;background:linear-gradient(rgba(255,250,242,0),#fffaf2 88%);pointer-events:none}
 @keyframes tPickIn{from{transform:translateY(26px)}to{transform:none}}
-.tAddPickHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tAddPickHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px}
 .tAddPickHead b{font-size:14px}
 .tAddPickHead .linkButton{min-height:40px;padding:4px 2px;font-size:13px}
 .tAddHead{margin:6px 0 4px;font-size:12px;color:var(--muted)}
@@ -373,6 +373,16 @@ span.tRowMain{border-style:dashed}
 /* 食材ピッカー: 一覧はスクロール、書く欄は右側の列 */
 /* 食材ピッカー: ストック・食材とも1行の横スクロール、下に書く欄 */
 .tAddStrip{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0 4px}
+.tPickBody{position:relative;flex:1;min-height:0;display:flex;margin-top:2px}
+.tPickScroll{flex:1;overflow-y:auto;padding:2px 28px calc(30px + env(safe-area-inset-bottom)) 14px}
+.tKanaRail{position:absolute;right:3px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;z-index:5}
+.tKanaBtn{width:22px;min-height:24px;padding:2px 0;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.92);font-size:11px;color:var(--muted);cursor:pointer}
+.tFoodRows{display:flex;flex-direction:column;padding:2px 0 4px}
+.tFoodRow{display:flex;align-items:center;gap:8px;width:100%;min-height:48px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--line);border-radius:12px;background:var(--white);font-size:15px;text-align:left;cursor:pointer}
+.tFoodRow small{margin-left:auto;flex:none;font-size:11px;color:var(--muted)}
+.tFilterRow{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.tFilterChip{min-height:36px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--white);font-size:13px;cursor:pointer}
+.tFilterChip.on{background:#6b5732;border-color:#6b5732;color:#fff}
 .tAddCustom{margin-top:8px}
 .tAddCustomRow{display:flex;gap:8px}
 .tAddCustomRow input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
