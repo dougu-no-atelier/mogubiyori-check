@@ -326,17 +326,21 @@ span.tRowMain{border-style:dashed}
 .tChip{display:inline-flex;align-items:center;gap:0;margin:2px 6px 2px 0;padding:0 0 0 12px;border:1px solid var(--line);border-radius:999px;background:#fffaf2;color:var(--ink);max-width:100%}
 .tChip .tRemove{width:36px;min-height:36px;border:0}
 /* 食材ピッカーは画面に浮かぶカードとして出す */
-.tAddPick{position:fixed;left:10px;right:10px;bottom:76px;z-index:80;margin:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:16px;background:#fffaf2;box-shadow:0 14px 36px rgba(90,70,40,.22);max-height:52dvh;overflow-y:auto;animation:tPickIn .18s ease-out}
-@keyframes tPickIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+/* 食材ピッカーは下からせり上がるシートとして出す（背面は薄く暗くする） */
+.tPickScrim{position:fixed;inset:0;z-index:79;background:rgba(74,60,35,.30);animation:tFadeIn .18s ease-out}
+@keyframes tFadeIn{from{opacity:0}to{opacity:1}}
+.tAddPick{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:8px 14px calc(30px + env(safe-area-inset-bottom));border-top:1px solid var(--line);border-radius:20px 20px 0 0;background:#fffaf2;box-shadow:0 -12px 32px rgba(90,70,40,.20);max-height:88dvh;overflow-y:auto;animation:tPickIn .2s ease-out}
+.tAddPick::before{content:'';display:block;width:38px;height:4px;border-radius:2px;background:#d9d0bf;margin:0 auto 8px}
+.tAddPick::after{content:'';position:fixed;left:0;right:0;bottom:0;height:26px;background:linear-gradient(rgba(255,250,242,0),#fffaf2 88%);pointer-events:none}
+@keyframes tPickIn{from{transform:translateY(26px)}to{transform:none}}
 .tAddPickHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tAddPickHead b{font-size:14px}
 .tAddPickHead .linkButton{min-height:40px;padding:4px 2px;font-size:13px}
 .tAddHead{margin:6px 0 4px;font-size:12px;color:var(--muted)}
 .tAddList{display:flex;flex-wrap:wrap;gap:6px}
-.tAddItem{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:3px 11px;border-radius:999px;font-size:13px;white-space:nowrap;text-align:left}
+.tAddItem{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:6px 14px;border-radius:999px;font-size:14px;white-space:nowrap;text-align:left}
 .tAddItem small{flex:none;font-size:11px;color:var(--muted)}
 .tAddStock{border-color:#c9d3a0;background:#f6f8e8}
-.tUpSlot .tAddPick{margin-left:2.6em}
 .tMealCountLabel{min-width:7.5em}
 .tWeekToggle{margin:0 0 6px}
 .tHead+.tabs{margin-top:10px}
@@ -368,8 +372,7 @@ span.tRowMain{border-style:dashed}
 .stockDelete{color:#792d1c}
 /* 食材ピッカー: 一覧はスクロール、書く欄は右側の列 */
 /* 食材ピッカー: ストック・食材とも1行の横スクロール、下に書く欄 */
-.tAddStrip{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:2px 1px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.tAddStrip::-webkit-scrollbar{display:none}
+.tAddStrip{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0 4px}
 .tAddCustom{margin-top:8px}
 .tAddCustomRow{display:flex;gap:8px}
 .tAddCustomRow input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
