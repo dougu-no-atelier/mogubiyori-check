@@ -484,16 +484,15 @@ function spineRecipeOpen(k){
  // 写真が読めない（オフラインなど）ときは写真だけ外す。CSP でインライン onerror は使えないのでここで付ける。
  try{const im=$('#dialogBody').querySelector('.recipeImg');if(im)im.addEventListener('error',()=>im.remove(),{once:true})}catch{}}
 // ===== 1.8.4: 作り方の一覧（写真つき）。計画に出た料理の行からだけでなく、いつでも全品を見られるようにする =====
-function recipesEntryMarkup(){return `<div class="recipeEntry"><h3>作り方</h3><p class="small muted">中期・後期の料理と、素材の下ごしらえを、写真つきで一覧できます。</p><button class="full" data-action="recipes">作り方の一覧を見る</button></div>`}
 function recipesPage(){
- if(typeof RECIPES!=='object'||!RECIPES)return head('','作り方','')+'<button class="linkButton qLegacyBack" data-nav="today">‹ 今日へ戻る</button><p class="small muted">作り方のデータがありません。</p>';
+ if(typeof RECIPES!=='object'||!RECIPES)return head('','作り方','')+'<p class="small muted">作り方のデータがありません。</p>';
  const PREP=['りんご','ブロッコリー','インゲン','にんじんスティック','ぶどう','さくらんぼ','ブルーベリー'];
  const dishSet=days=>{const s=[];for(const day of days)for(const meal of day)for(const n of meal)if(typeof n==='string'&&!PREP.includes(n)&&spineRecipe(n)&&!s.includes(n))s.push(n);return s};
  const chuki=dishSet(SPINE_CHUKI),kouki=dishSet(SPINE_KOUKI).filter(n=>!chuki.includes(n));
  const prep=PREP.filter(n=>spineRecipe(n));
  const card=n=>{const r=RECIPES[n],img=/^img\/recipes\/[\w-]+\.(webp|png|jpg)$/.test(r.img||'')?r.img:'';return `<button class="recipeCard" data-t="spine-recipe" data-dish="${esc(n)}" aria-label="${esc(n)}の作り方を見る">${img?`<img class="recipeThumb" src="${esc(img)}" alt="" loading="lazy">`:''}<span>${esc(n)}</span></button>`};
  const sec=(t,list)=>list.length?`<section class="recipeGroup"><h3>${t}（${list.length}品）</h3><div class="recipeGrid">${list.map(card).join('')}</div></section>`:'';
- return head('','作り方','料理を選ぶと、写真・材料・手順が出ます')+'<button class="linkButton qLegacyBack" data-nav="today">‹ 今日へ戻る</button>'+sec('中期の料理',chuki)+sec('後期の料理',kouki)+sec('素材の下ごしらえ',prep)+'<p class="small muted screenFoot">量は目安です。食べる様子を見ながら調整してください。</p>'}
+ return head('','作り方','料理を選ぶと、写真・材料・手順が出ます')+''+sec('中期の料理',chuki)+sec('後期の料理',kouki)+sec('素材の下ごしらえ',prep)+'<p class="small muted screenFoot">量は目安です。食べる様子を見ながら調整してください。</p>'}
 // 一覧の写真が読めない（オフラインなど）ときは、その写真だけ外す（CSP でインライン onerror は使えないため、捕捉フェーズで受ける）。
 document.addEventListener('error',e=>{const t=e.target;if(t&&t.classList&&t.classList.contains('recipeThumb'))t.remove()},true);
 function spineBody(d,slot,r,sp){
@@ -617,7 +616,7 @@ function tUpcomingDay(d,s,on=true){
 // on=一週間のおすすめを出す（weekSuggest）。出さないときは提案（s）を使わず、実際の献立だけを出す。
 function todayMenuBlock(day=tSuggestFor(view.date)){
  const d=view.date,on=qWeekSuggestOn(),s=on?qSuggest():null,days=Array.from({length:6},(_,i)=>plusDate(jstDate(),i+1));
- return `<section class="tBlock tMenu" id="todayMenu" aria-labelledby="menuTitle"><h2 id="menuTitle">メニュー</h2>${tMealSlotsBar(d)}${tItemsBar()}${tWeekToggle()}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}<div id="todayMeals" class="tMenuToday"><div class="tMenuDayHead"><b>${esc(dateLabel(d))}</b>${d===jstDate()?'<span class="tMenuTodayMark">今日</span>':''}</div>${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}</div>${recipesEntryMarkup()}<div id="todayUpcoming" class="tMenuWeek"><ul class="tUpDays">${days.map(x=>tUpcomingDay(x,s,on)).join('')}</ul>${s&&s.unknown.length?`<p class="small muted tUpUnknown">主食・主菜・副菜が分からず、メニューに使っていないストック：${esc(s.unknown.join('・'))}（冷凍庫のカードの「含まれる食材を直す」で使えます）</p>`:''}${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</div></section>`;
+ return `<section class="tBlock tMenu" id="todayMenu" aria-labelledby="menuTitle"><h2 id="menuTitle">メニュー</h2>${tMealSlotsBar(d)}${tItemsBar()}${tWeekToggle()}${tSameFoodNote(d)}${quickStaleNote?`<p class="qNewFoodNote qStaleNote" role="status">${esc(quickStaleNote)}</p>`:''}<div id="todayMeals" class="tMenuToday"><div class="tMenuDayHead"><b>${esc(dateLabel(d))}</b>${d===jstDate()?'<span class="tMenuTodayMark">今日</span>':''}</div>${tSlots(d).map(slot=>tMealMarkup(d,slot,day)).join('')}</div><div id="todayUpcoming" class="tMenuWeek"><ul class="tUpDays">${days.map(x=>tUpcomingDay(x,s,on)).join('')}</ul>${s&&s.unknown.length?`<p class="small muted tUpUnknown">主食・主菜・副菜が分からず、メニューに使っていないストック：${esc(s.unknown.join('・'))}（冷凍庫のカードの「含まれる食材を直す」で使えます）</p>`:''}${s?`<details class="tUpWhy"><summary>おすすめの決め方</summary>${qSuggestFactsMarkup(s,true)}</details>`:''}</div></section>`;
 }
 // 期限が近いストック。冷凍庫から期限が近い順に最大3件、名前と「あと○日」だけ。押すとカードの詳細が開く。
 function todayStockBlock(){const list=stockSorted(state().batches.filter(b=>b.quantity>0&&stockExpiry(b))).slice(0,3);return `<section class="tBlock tStock" id="todayStock" aria-labelledby="todayStockTitle"><h2 id="todayStockTitle">目安が近いストック</h2>${list.length?list.map(b=>`<button class="tStockRow" data-action="stockDetail" data-id="${b.id}"><span>${esc(b.name)}</span>${stockBadge(b)}</button>`).join('')+'<p class="small muted">「あと○日」は作った日から7日の目安です。</p>':'<p class="small muted">目安が近いストックはありません。</p>'}</section>`}
