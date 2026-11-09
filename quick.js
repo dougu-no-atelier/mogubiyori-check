@@ -88,6 +88,11 @@ function tRemoveButton(d,slot,name){return `<button class="tRemove" data-t="remo
 // リストにない食材を書いて足す欄（「＋ 食材を足す」と記録への追加、共通）。一覧の下に1行で置く。
 function tCustomFoodForm(mode,d,slot){return `<form class="tAddCustom" id="${mode==='plan'?'tAddCustomForm':'tRecCustomForm'}" data-date="${d}" data-slot="${slot}"><div class="tAddCustomRow"><input type="text" name="name" maxlength="60" placeholder="食材名を書く・探す" aria-label="食材名（探す・追加）" autocomplete="off"><button type="submit" data-edit>追加</button></div></form>`}
 // 「＋ 食材を足す」で開く候補。ストック（残り個数つき・期限が近い順）を先に、次に食材の一覧（登録済みの食材→量の目安の分類表の食材）。入っている食材は出さない。
+// 食材マスターの並べ方：食べたことがある食材を先頭にまとめ、残りは種類ごとに分ける（数は減らさない）。
+const T_GROUPS=[['grains','主食'],['vegfruit','野菜・果物'],['fish','魚'],['meat','肉'],['tofu','豆腐・大豆'],['egg','卵'],['dairy','乳製品'],['other','そのほか']];
+function tGroupOf(n){const g=qFoodGroup(n);if(g)return g;if(/がゆ|ごはん|食パン|うどん|そうめん|パスタ|マカロニ|コーンフレーク|蒸しパン/.test(n))return 'grains';if(/納豆|豆乳|きな粉|大豆|枝豆/.test(n))return 'tofu';if(/卵/.test(n))return 'egg';return 'other'}
+function tGroupedMaster(names){const eaten=qEatenFoods(),fav=[],by=new Map(T_GROUPS.map(([k])=>[k,[]]));for(const n of names){if(eaten.has(n)){fav.push(n);continue}by.get(tGroupOf(n)).push(n)}fav.sort((a,b)=>String(eaten.get(b)).localeCompare(String(eaten.get(a))));const out=[];if(fav.length)out.push(['食べたことがある',fav]);for(const [k,label] of T_GROUPS)if(by.get(k).length)out.push([label,by.get(k)]);return out}
+function tMasterMarkup(master,chipFn){return `<p class="tAddHead">食材（全${master.length}品）</p>`+tGroupedMaster(master).map(([label,items])=>`<p class="tAddHead">${label}</p><div class="tAddStrip">${items.map(chipFn).join('')}</div>`).join('')}
 function tAddPicker(d,slot){
  if(view.addOpen!==tAddOpenKey(d,slot))return '';
  // 1.4.7: 候補は下書きに対して開く（下書きに入っている食材は出さない）。編集中でなければ保存済みの食材が基準。
@@ -95,7 +100,7 @@ function tAddPicker(d,slot){
  const stock=stockSorted(state().batches.filter(b=>b.quantity>0)).filter(b=>!qStockNames(b).every(n=>have.has(n))),inStock=new Set(stock.flatMap(qStockNames));
  const hidden=new Set(state().foods.filter(f=>f.quickHidden).map(f=>f.name));
  const master=[...new Set([...state().foods.map(f=>f.name),...Object.values(qFoodGroups).flat(),...Object.keys(qSuggestExtraRoles)])].filter(n=>!have.has(n)&&!inStock.has(n)&&!hidden.has(n));
- return `<div class="tPickScrim"></div><div class="tAddPick" data-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}に足す食材</b><button class="linkButton" data-t="add-open" ${attrs} aria-expanded="true">閉じる</button></div>${tCustomFoodForm('plan',d,slot)}${stock.length?`<p class="tAddHead">ストック</p><div class="tAddStrip">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="add-food" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}<p class="tAddHead">食材（全${master.length}品）</p><div class="tAddStrip">${master.map(n=>`<button class="tAddItem" data-t="add-food" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`).join('')}</div></div>`;
+ return `<div class="tPickScrim"></div><div class="tAddPick" data-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}に足す食材</b><button class="linkButton" data-t="add-open" ${attrs} aria-expanded="true">閉じる</button></div>${tCustomFoodForm('plan',d,slot)}${stock.length?`<p class="tAddHead">ストック</p><div class="tAddStrip">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="add-food" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}${tMasterMarkup(master,n=>`<button class="tAddItem" data-t="add-food" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`)}</div>`;
 }
 // 1.4.5（要望B）: 献立を手で編集（食材の追加・削除）したら、その保存に続けて、窓（今日〜+6日）の手つかずのおすすめ献立を
 // 現在のストック残量・押さえで組み直す。編集でストックの押さえが変わると、ほかの日のおすすめも変わりうるため（「臨機応変に変化」）。
@@ -746,7 +751,7 @@ function tRecAddPicker(d,slot){
  const stock=stockSorted(state().batches.filter(b=>b.quantity>0)).filter(b=>!qStockNames(b).every(n=>have.has(n))),inStock=new Set(stock.flatMap(qStockNames));
  const hidden=new Set(state().foods.filter(f=>f.quickHidden).map(f=>f.name));
  const master=[...new Set([...state().foods.map(f=>f.name),...Object.values(qFoodGroups).flat(),...Object.keys(qSuggestExtraRoles)])].filter(n=>!have.has(n)&&!inStock.has(n)&&!hidden.has(n));
- return `<div class="tPickScrim"></div><div class="tAddPick" data-rec-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}の記録に足す食材</b><button class="linkButton" data-t="row-add" ${attrs} aria-expanded="true">閉じる</button></div>${tCustomFoodForm('rec',d,slot)}${stock.length?`<p class="tAddHead">ストック</p><div class="tAddStrip">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="rec-pick" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}<p class="tAddHead">食材（全${master.length}品）</p><div class="tAddStrip">${master.map(n=>`<button class="tAddItem" data-t="rec-pick" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`).join('')}</div></div>`;
+ return `<div class="tPickScrim"></div><div class="tAddPick" data-rec-add-pick="${d}|${slot}"><div class="tAddPickHead"><b>${esc(slots[slot])}の記録に足す食材</b><button class="linkButton" data-t="row-add" ${attrs} aria-expanded="true">閉じる</button></div>${tCustomFoodForm('rec',d,slot)}${stock.length?`<p class="tAddHead">ストック</p><div class="tAddStrip">${stock.map(b=>`<button class="tAddItem tAddStock" data-t="rec-pick" ${attrs} data-batch="${b.id}" data-edit><span>${esc(b.name)}</span><small>残り${b.quantity}個</small></button>`).join('')}</div>`:''}${tMasterMarkup(master,n=>`<button class="tAddItem" data-t="rec-pick" ${attrs} data-name="${esc(n)}" data-edit>${esc(n)}</button>`)}</div>`;
 }
 // ＋ の選択先。食材が1つなら量の選択（前回量／目安／量なし＝qOneTap の初期値）を開き、決めたら即保存する（qRecAddDecided）。
 // ストックに食材が複数あるときは、1食材ずつ量の画面を出さず、前回量／目安（どちらも無ければ量なし）でまとめて足す。どちらも在庫は変えない。
