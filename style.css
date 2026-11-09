@@ -369,7 +369,7 @@ span.tRowMain{border-style:dashed}
 .recipeGroup>h3{margin:0 0 10px;font-size:16px}
 .recipeEntry{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
 .recipeEntry>h3{margin:0 0 6px;font-size:16px}
-.stockDelete{color:#e60012;font-weight:700}.stockDeleteDo{background:#e60012;border-color:#e60012}.stockRowWrap{position:relative;overflow:hidden;border-radius:14px}.stockRowDel{position:absolute;top:0;right:0;bottom:0;width:76px;background:#e60012;color:#fff;font-weight:700;border:0;border-radius:0}.stockRow{position:relative;z-index:1;transition:transform .18s ease;touch-action:pan-y}.stockRowWrap.swiped .stockRow{transform:translateX(-76px)}
+.stockDelete{color:#e60012;font-weight:700}.stockDeleteDo{background:#e60012;border-color:#e60012}.stockRowWrap{position:relative;overflow:hidden;border-radius:14px}.stockRowDel{position:absolute;inset:0;background:#e60012;color:#fff;font-weight:700;border:0;border-radius:0;text-align:right;padding-right:22px}.stockRowDel span{display:inline-block;transition:transform .15s ease}.stockRowWrap.willDelete .stockRowDel{background:#b0000c}.stockRowWrap.willDelete .stockRowDel span{transform:scale(1.18)}.stockRowWrap.dragging .stockRow{transition:none}.stockRowWrap.deleting{transition:height .3s ease,opacity .3s ease;opacity:0;pointer-events:none}.stockRowWrap.deleting .stockRow{transform:translateX(-100%);transition:transform .3s ease}.stockRow{position:relative;z-index:1;transition:transform .18s ease;touch-action:pan-y}.stockRowWrap.swiped .stockRow{transform:translateX(-76px)}
 /* 食材ピッカー: 一覧はスクロール、書く欄は右側の列 */
 /* 食材ピッカー: ストック・食材とも1行の横スクロール、下に書く欄 */
 .tAddStrip{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0 4px}
