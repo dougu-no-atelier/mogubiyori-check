@@ -54,6 +54,7 @@ function draftResume(){
   if(saved.id==='noteForm')openDialog('<h2>家族に、ひとこと。</h2><form id="noteForm"><label class="field">家族の置き手紙<textarea name="note" maxlength="2000"></textarea></label>'+formActions('メモを残す')+'</form>');else openers[saved.id]();
   const form=document.getElementById(saved.id);if(!form)return;
   for(const field of saved.fields){const el=[...form.elements].find(e=>e.name===field.name&&(field.type!=='checkbox'||e.value===field.value));if(!el)continue;if(field.type==='checkbox')el.checked=field.checked;else el.value=field.value;}
+  if(typeof bfRefresh==='function')bfRefresh(form);
   form.dataset.revision=saved.revision;form.dataset.dirty='yes';savedForm=saved;
  }finally{restoringForm=false;draftPersist();draftBanner();}
 }

@@ -387,3 +387,5 @@ span.tRowMain{border-style:dashed}
 .tAddCustomRow{display:flex;gap:8px}
 .tAddCustomRow input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:999px;font:inherit;background:var(--white);color:inherit}
 .tAddCustomRow button{flex:none;padding:9px 16px;border:1px solid var(--line);border-radius:999px;background:var(--white);font:inherit;font-weight:600;cursor:pointer}
+
+.bfField{display:grid;gap:6px;margin:0 0 12px}.bfLabel{font-weight:600}.bfChips{display:flex;flex-wrap:wrap;gap:6px}.bfChip{min-height:36px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--lime);font-size:14px;cursor:pointer}.bfNone{color:var(--muted);font-size:13px}.bfOpen{justify-self:start}.tAddItem.on,.tFoodRow.on{background:var(--lime);border-color:var(--green)}
